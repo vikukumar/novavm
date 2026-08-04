@@ -1,0 +1,51 @@
+# NovaVM — .gitignore
+
+# Rust build artifacts
+/target/
+**/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.turbo/
+
+# Tauri
+src-tauri/target/
+
+# Generated docs
+docs/book/
+
+# Secrets / keys
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.toml
+.env
+.env.*
+
+# Test artifacts
+*.profraw
+*.profdata
+coverage/
+
+# Editor backups
+*~
+*.bak
+*.swp
+*.swo

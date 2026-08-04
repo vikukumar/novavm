@@ -1,0 +1,98 @@
+[workspace]
+members = [
+    "engine",
+    "hypervisor",
+    "scheduler",
+    "memory",
+    "storage",
+    "network",
+    "snapshot",
+    "monitor",
+    "agent",
+    "api",
+    "sdk",
+    "src-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+authors = ["NovaVM Contributors"]
+license = "Apache-2.0"
+repository = "https://github.com/vikukumar/novavm"
+rust-version = "1.78"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Crypto / security
+aes-gcm = "0.10"
+sha2 = "0.10"
+rand = "0.8"
+zeroize = { version = "1.7", features = ["derive"] }
+
+# Compression
+zstd = "0.13"
+
+# UUID
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# System info
+sysinfo = "0.31"
+
+# Channels / concurrency
+dashmap = "6.1"
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+tempfile = "3"
+
+# Networking
+socket2 = "0.5"
+ipnet = { version = "2.9", features = ["serde"] }
+
+# Inter-crate dependencies
+engine = { path = "engine" }
+hypervisor = { path = "hypervisor" }
+scheduler = { path = "scheduler" }
+memory = { path = "memory" }
+storage = { path = "storage" }
+network = { path = "network" }
+snapshot = { path = "snapshot" }
+monitor = { path = "monitor" }
+agent = { path = "agent" }
+api = { path = "api" }
+sdk = { path = "sdk" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.test]
+opt-level = 1
+debug = true

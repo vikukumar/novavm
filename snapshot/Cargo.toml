@@ -1,0 +1,22 @@
+[package]
+name = "snapshot"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "NovaVM snapshot orchestration"
+
+[dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+engine = { workspace = true }
+storage = { workspace = true }
+
+[lib]
+name = "snapshot"
+path = "src/lib.rs"

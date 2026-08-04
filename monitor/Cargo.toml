@@ -1,0 +1,23 @@
+[package]
+name = "monitor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "NovaVM real-time performance monitoring"
+
+[dependencies]
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+sysinfo = { workspace = true }
+parking_lot = { workspace = true }
+dashmap = { workspace = true }
+
+[lib]
+name = "monitor"
+path = "src/lib.rs"

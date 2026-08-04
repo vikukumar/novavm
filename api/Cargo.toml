@@ -1,0 +1,28 @@
+[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "NovaVM unified public API facade"
+
+[dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+engine = { workspace = true }
+hypervisor = { workspace = true }
+scheduler = { workspace = true }
+memory = { workspace = true }
+storage = { workspace = true }
+network = { workspace = true }
+snapshot = { workspace = true }
+monitor = { workspace = true }
+
+[lib]
+name = "api"
+path = "src/lib.rs"

@@ -1,0 +1,22 @@
+[package]
+name = "network"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "NovaVM virtual networking subsystem"
+
+[dependencies]
+tokio = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+ipnet = { workspace = true }
+parking_lot = { workspace = true }
+socket2 = { workspace = true }
+
+[lib]
+name = "network"
+path = "src/lib.rs"
