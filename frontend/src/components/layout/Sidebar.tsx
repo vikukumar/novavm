@@ -10,7 +10,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Zap,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -48,9 +47,11 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-nova-500 to-nova-700 flex items-center justify-center shadow-lg">
-          <Zap size={16} className="text-white" />
-        </div>
+        <img
+          src="/novavm_icon.png"
+          alt="NovaVM Logo"
+          className="flex-shrink-0 w-8 h-8 rounded-lg shadow-lg object-cover border border-white/10"
+        />
         <AnimatePresence>
           {!collapsed && (
             <motion.div

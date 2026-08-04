@@ -60,9 +60,16 @@ export function SettingsPage() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-2xl mx-auto space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground text-sm mt-0.5">NovaVM v{version}</p>
+      <div className="flex items-center gap-4">
+        <img
+          src="/novavm_icon.png"
+          alt="NovaVM Logo"
+          className="w-12 h-12 rounded-xl shadow-lg border border-white/10 object-cover"
+        />
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
+          <p className="text-muted-foreground text-sm mt-0.5">NovaVM v{version}</p>
+        </div>
       </div>
 
       {/* Appearance */}

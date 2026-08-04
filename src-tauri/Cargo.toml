@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "NovaVM Tauri desktop application"
+build = "build.rs"
 
 [lib]
 name = "novavm_app_lib"
