@@ -249,7 +249,7 @@ export function VmDetailPage() {
               <ConfigItem label="vCPUs" value={String(vm.cpu_vcpus)} />
               <ConfigItem label="Memory" value={formatMib(vm.memory_mib)} />
               <ConfigItem label="Group" value={vm.group ?? '—'} />
-              <ConfigItem label="Tags" value={vm.tags.join(', ') || '—'} />
+              <ConfigItem label="Tags" value={(vm.tags || []).join(', ') || '—'} />
             </div>
           </div>
         </div>

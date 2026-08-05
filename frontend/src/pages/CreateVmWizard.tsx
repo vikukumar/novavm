@@ -131,8 +131,12 @@ export function CreateVmWizard() {
         tags: [guestOs],
       }
 
-      const id = await createVm(finalConfig)
-      navigate(`/vms/${id}`)
+      await createVm(finalConfig)
+      toast({
+        title: 'VM Created Successfully',
+        description: `Virtual Machine "${config.name}" setup complete.`,
+      })
+      navigate('/vms')
     } catch (e) {
       setErrorModal({ title: 'VM Creation Failed', err: e })
     } finally {
