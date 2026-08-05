@@ -43,13 +43,17 @@ export function StoragePage() {
       const selected = await open({
         directory: false,
         multiple: false,
-        filters: [{ name: 'Disk Image Target', extensions: ['qcow2', 'vmdk', 'vhd', 'raw'] }],
+        filters: [
+          { name: 'Disk Image Files (*.qcow2, *.vmdk, *.vhd, *.vhdx, *.raw)', extensions: ['qcow2', 'vmdk', 'vhd', 'vhdx', 'raw', 'QCOW2', 'VMDK', 'VHD', 'VHDX', 'RAW'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
       })
-      if (selected && typeof selected === 'string') {
-        setPath(selected)
+      const filePath = Array.isArray(selected) ? selected[0] : selected
+      if (filePath && typeof filePath === 'string') {
+        setPath(filePath)
       }
     } catch (e) {
-      console.error(e)
+      setErrorModal({ title: 'Browse Target File Failed', err: e })
     }
   }
 
@@ -58,10 +62,14 @@ export function StoragePage() {
       const selected = await open({
         directory: false,
         multiple: false,
-        filters: [{ name: 'Disk & ISO Images', extensions: ['iso', 'img', 'vmdk', 'qcow2', 'vhd', 'raw'] }],
+        filters: [
+          { name: 'Disk & ISO Images (*.iso, *.img, *.vmdk, *.qcow2, *.vhd, *.vhdx, *.raw)', extensions: ['iso', 'img', 'vmdk', 'qcow2', 'vhd', 'vhdx', 'raw', 'ISO', 'IMG', 'VMDK', 'QCOW2', 'VHD', 'VHDX', 'RAW'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
       })
-      if (selected && typeof selected === 'string') {
-        await storageApi.importDisk(selected)
+      const filePath = Array.isArray(selected) ? selected[0] : selected
+      if (filePath && typeof filePath === 'string') {
+        await storageApi.importDisk(filePath)
         await load()
       }
     } catch (e) {

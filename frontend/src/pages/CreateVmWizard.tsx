@@ -9,6 +9,7 @@ import { networkApi, storageApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { DiskBus, DiskMetadata, NicType, VirtualSwitch, VmConfig } from '@/types'
 import { ErrorModal } from '@/components/ui/ErrorModal'
+import { toast } from '@/components/ui/use-toast'
 
 const STEPS = [
   { id: 'name', label: 'Name & OS Media', icon: <Server size={14} /> },
@@ -290,13 +291,19 @@ function Step1NameOs({
       const selected = await open({
         directory: false,
         multiple: false,
-        filters: [{ name: 'ISO & Disk Images', extensions: ['iso', 'img', 'raw'] }],
+        filters: [
+          { name: 'ISO & Disk Images (*.iso, *.img, *.raw)', extensions: ['iso', 'img', 'raw', 'ISO', 'IMG', 'RAW'] },
+          { name: 'Virtual Disks (*.qcow2, *.vmdk, *.vhd, *.vhdx)', extensions: ['qcow2', 'vmdk', 'vhd', 'vhdx', 'QCOW2', 'VMDK', 'VHD', 'VHDX'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
       })
-      if (selected && typeof selected === 'string') {
-        onChangeIsoPath(selected)
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (path && typeof path === 'string') {
+        onChangeIsoPath(path)
       }
     } catch (e) {
-      console.error(e)
+      console.error('Browse ISO File Failed:', e)
+      toast({ title: 'Browse ISO File Failed', description: String(e), variant: 'destructive' })
     }
   }
 
@@ -520,10 +527,15 @@ function Step4Storage({
       const selected = await open({
         directory: false,
         multiple: false,
-        filters: [{ name: 'Virtual Disk Files', extensions: ['qcow2', 'vmdk', 'vhd', 'raw'] }],
+        filters: [
+          { name: 'Virtual Disks (*.qcow2, *.vmdk, *.vhd, *.vhdx, *.raw)', extensions: ['qcow2', 'vmdk', 'vhd', 'vhdx', 'raw', 'QCOW2', 'VMDK', 'VHD', 'VHDX', 'RAW'] },
+          { name: 'ISO & Disk Images (*.iso, *.img)', extensions: ['iso', 'img', 'ISO', 'IMG'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
       })
-      if (selected && typeof selected === 'string') {
-        onChangeExistingPath(selected)
+      const path = Array.isArray(selected) ? selected[0] : selected
+      if (path && typeof path === 'string') {
+        onChangeExistingPath(path)
       }
     } catch (e) {
       console.error(e)
