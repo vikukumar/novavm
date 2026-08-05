@@ -20,6 +20,8 @@ import { useVmStore } from '@/stores/vmStore'
 import { useMetricsStore } from '@/stores/metricsStore'
 import { useUiStore } from '@/stores/uiStore'
 
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+
 export default function App() {
   const fetchVms = useVmStore((s) => s.fetchVms)
   const startPolling = useMetricsStore((s) => s.startPolling)
@@ -62,18 +64,20 @@ export default function App() {
         <BrowserRouter>
           <CommandPalette />
           <Layout>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/vms" element={<VmListPage />} />
-              <Route path="/vms/create" element={<CreateVmWizard />} />
-              <Route path="/vms/:id" element={<VmDetailPage />} />
-              <Route path="/storage" element={<StoragePage />} />
-              <Route path="/network" element={<NetworkPage />} />
-              <Route path="/snapshots" element={<SnapshotPage />} />
-              <Route path="/logs" element={<LogsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<DashboardPage />} />
+                <Route path="/vms" element={<VmListPage />} />
+                <Route path="/vms/create" element={<CreateVmWizard />} />
+                <Route path="/vms/:id" element={<VmDetailPage />} />
+                <Route path="/storage" element={<StoragePage />} />
+                <Route path="/network" element={<NetworkPage />} />
+                <Route path="/snapshots" element={<SnapshotPage />} />
+                <Route path="/logs" element={<LogsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Routes>
+            </ErrorBoundary>
           </Layout>
         </BrowserRouter>
       </ToastProvider>

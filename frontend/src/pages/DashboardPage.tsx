@@ -41,20 +41,16 @@ export function DashboardPage() {
   const stoppedVms = vms.filter((v) => v.state === 'stopped')
   const crashedVms = vms.filter((v) => v.state === 'crashed')
 
-  const cpuData = hostHistory.map((m, i) => ({
+  const cpuData = (hostHistory || []).map((m, i) => ({
     t: i,
-    cpu: m.cpu_percent,
-    mem: hostMetrics
-      ? (m.memory_used_mib / (hostMetrics.memory_total_mib || 1)) * 100
+    cpu: m?.cpu_percent ?? 0,
+    mem: hostMetrics && hostMetrics.memory_total_mib
+      ? ((m?.memory_used_mib ?? 0) / (hostMetrics.memory_total_mib || 1)) * 100
       : 0,
   }))
 
   return (
-    <motion.div
-      initial="initial"
-      animate="animate"
-      className="space-y-6 max-w-7xl mx-auto"
-    >
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
       <motion.div {...fadeInUp} className="flex items-center justify-between">
         <div>
@@ -239,7 +235,7 @@ export function DashboardPage() {
           </div>
         )}
       </motion.div>
-    </motion.div>
+    </div>
   )
 }
 

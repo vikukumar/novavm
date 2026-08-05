@@ -85,7 +85,7 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
       )}
 
       {/* Tags */}
-      {!compact && vm.tags.length > 0 && (
+      {!compact && vm.tags && vm.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
           {vm.tags.slice(0, 3).map((tag) => (
             <span

@@ -209,7 +209,7 @@ export function VmDetailPage() {
                 <YAxis domain={[0, 100]} hide />
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '11px' }}
-                  formatter={(v: number) => [`${v.toFixed(1)}%`, 'CPU']}
+                  formatter={(v: unknown) => [typeof v === 'number' ? `${v.toFixed(1)}%` : '0%', 'CPU']}
                   labelFormatter={() => ''}
                 />
                 <Area type="monotone" dataKey="cpu" stroke="hsl(236,72%,65%)" strokeWidth={2} fill="url(#vmCpuGrad)" />
