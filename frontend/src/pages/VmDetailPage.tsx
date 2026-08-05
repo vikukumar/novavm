@@ -5,7 +5,7 @@ import {
   Trash2, ArrowLeft, Cpu, MemoryStick,
   Activity, Terminal, Settings2,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -22,19 +22,47 @@ export function VmDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const [loading, setLoading] = useState(true)
 
   const vm = useVmStore((s) => s.vms.find((v) => v.id === id))
-  const { startVm, pauseVm, resumeVm, stopVm, resetVm, destroyVm } = useVmStore()
+  const { startVm, pauseVm, resumeVm, stopVm, resetVm, destroyVm, fetchVms } = useVmStore()
   const vmMetrics = useMetricsStore((s) => (id ? s.vmMetrics[id] : null))
   const vmHistory = useMetricsStore((s) => (id ? s.vmHistory[id] ?? [] : []))
 
-  if (!vm) {
+  // Fetch VMs on mount in case we navigated here before store synced
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      await fetchVms()
+      setLoading(false)
+    }
+    load()
+  }, [fetchVms, id])
+
+  if (loading && !vm) {
     return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        VM not found
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm">Loading virtual machine...</span>
       </div>
     )
   }
+
+  if (!loading && !vm) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
+        <span className="text-base font-medium">VM not found</span>
+        <button
+          onClick={() => navigate('/vms')}
+          className="text-sm text-primary hover:underline"
+        >
+          ← Back to Virtual Machines
+        </button>
+      </div>
+    )
+  }
+
+  if (!vm) return null
 
   const handleAction = async (action: () => Promise<void>, label: string) => {
     try {

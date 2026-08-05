@@ -96,8 +96,12 @@ export function CreateVmWizard() {
           sizeGib: newDiskSizeGib,
           thin_provisioned: true,
         })
+        // path may be a PathBuf object serialized or a string
+        const diskPath = diskMeta.path
+          ? (typeof diskMeta.path === 'string' ? diskMeta.path : String(diskMeta.path))
+          : `${config.name}-hd0.novadisk`
         finalDisks.push({
-          image_path: diskMeta.path || `${config.name}-hd0.qcow2`,
+          image_path: diskPath,
           bus: newDiskBus,
           read_only: false,
           boot: !isoPath,
@@ -137,7 +141,7 @@ export function CreateVmWizard() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <div className="mb-8">
         <h2 className="text-2xl font-bold tracking-tight">New Virtual Machine Wizard</h2>
         <p className="text-muted-foreground text-sm mt-0.5">
@@ -265,7 +269,7 @@ export function CreateVmWizard() {
         error={errorModal?.err as Error}
         onClose={() => setErrorModal(null)}
       />
-    </motion.div>
+    </div>
   )
 }
 

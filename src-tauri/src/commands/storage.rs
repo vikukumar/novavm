@@ -15,16 +15,18 @@ pub async fn list_disks(state: State<'_, AppState>) -> ApiResult<Vec<DiskMetadat
 
 /// Create a new disk image.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_disk(
     name: String,
     path: String,
-    size_gib: u64,
+    #[allow(non_snake_case)]
+    sizeGib: u64,
     thin_provisioned: Option<bool>,
     encrypted: Option<bool>,
     compressed: Option<bool>,
     state: State<'_, AppState>,
 ) -> ApiResult<DiskMetadata> {
-    let size_bytes = size_gib * 1024 * 1024 * 1024;
+    let size_bytes = sizeGib * 1024 * 1024 * 1024;
     let target_path = if path.trim().is_empty() {
         let storage_dir = state.settings.lock().default_storage_dir.clone();
         std::fs::create_dir_all(&storage_dir).ok();
