@@ -27,7 +27,9 @@ export const useVmStore = create<VmStore>((set, get) => ({
   error: null,
 
   fetchVms: async () => {
-    set({ loading: true, error: null })
+    if (get().vms.length === 0) {
+      set({ loading: true, error: null })
+    }
     try {
       const vms = await vmApi.list()
       set({ vms, loading: false })
