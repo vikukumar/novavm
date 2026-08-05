@@ -7,6 +7,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod persistence;
 mod state;
 
 use std::time::Duration;
@@ -61,6 +62,26 @@ fn main() {
                     .ok();
             }
             tracing::info!("VMware-style virtual networks initialized");
+
+            // Restore persisted VMs and Disks from storage directory
+            let storage_dir = state.settings.lock().default_storage_dir.clone();
+            let persistence = persistence::Persistence::new(&storage_dir);
+            let saved_vms = persistence.load_vms();
+            let saved_disks = persistence.load_disks();
+
+            *state.disks.write() = saved_disks;
+
+            let engine = state.engine.clone();
+            let metrics = state.metrics.clone();
+            tauri::async_runtime::spawn(async move {
+                for cfg in saved_vms {
+                    let name = cfg.name.clone();
+                    if let Ok(id) = engine.create_vm(cfg).await {
+                        metrics.register_vm(id);
+                        tracing::info!(%id, name = %name, "Restored persisted VM on startup");
+                    }
+                }
+            });
 
             tracing::info!("NovaVM application ready");
             Ok(())

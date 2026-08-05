@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { Plus, Search, Grid, List } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -45,11 +45,7 @@ export function VmListPage() {
   )
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="space-y-5 max-w-7xl mx-auto"
-    >
+    <div className="space-y-5 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -195,6 +191,6 @@ export function VmListPage() {
           Showing {filtered.length} of {vms.length} VMs
         </p>
       )}
-    </motion.div>
+    </div>
   )
 }

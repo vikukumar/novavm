@@ -43,6 +43,7 @@ pub async fn create_vm(
     let vm_id = state.engine.create_vm(request.config).await.map_err(ApiError::from)?;
     state.metrics.register_vm(vm_id);
     state.push_log("INFO", "vm", format!("Virtual machine '{name}' (ID: {vm_id}) created successfully"));
+    state.sync_vms_to_disk().await;
     tracing::info!(%vm_id, "VM created via Tauri command");
     Ok(CreateVmResponse { vm_id })
 }
@@ -93,6 +94,7 @@ pub async fn destroy_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()
     state.engine.destroy_vm(vm_id).await.map_err(ApiError::from)?;
     state.metrics.deregister_vm(&vm_id);
     state.push_log("WARN", "vm", format!("Virtual machine {vm_id} destroyed and unregistered"));
+    state.sync_vms_to_disk().await;
     Ok(())
 }
 
@@ -139,5 +141,7 @@ pub async fn update_vm_config(
         ));
     }
     *vm.config_mut() = config;
+    drop(vm);
+    state.sync_vms_to_disk().await;
     Ok(())
 }

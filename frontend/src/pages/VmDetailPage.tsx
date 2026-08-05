@@ -1,5 +1,4 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import {
   Play, Pause, Square, RotateCcw, Camera,
   Trash2, ArrowLeft, Cpu, MemoryStick,
@@ -83,11 +82,7 @@ export function VmDetailPage() {
   ]
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-5xl mx-auto space-y-6"
-    >
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm">
         <button
@@ -285,7 +280,7 @@ export function VmDetailPage() {
           VM settings editor — edit CPU, RAM, disks, NICs, firmware. Only available while stopped.
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }
 

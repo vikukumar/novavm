@@ -50,6 +50,7 @@ pub async fn create_disk(
 
     state.disks.write().push(meta.clone());
     state.push_log("INFO", "storage", format!("Disk image '{name}' ({sizeGib} GiB) created successfully"));
+    state.sync_disks_to_disk();
     Ok(meta)
 }
 
@@ -102,6 +103,7 @@ pub async fn import_disk(
 
     state.disks.write().push(meta.clone());
     state.push_log("INFO", "storage", format!("Disk/ISO image '{file_name}' imported from '{path}'"));
+    state.sync_disks_to_disk();
     Ok(meta)
 }
 
@@ -124,6 +126,8 @@ pub async fn delete_disk(
             }
         }
         state.push_log("WARN", "storage", format!("Disk image '{name}' deleted", name = removed.name));
+        drop(disks);
+        state.sync_disks_to_disk();
         Ok(())
     } else {
         Err(ApiError::new("DISK_NOT_FOUND", "Disk image not found in registry"))

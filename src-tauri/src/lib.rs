@@ -2,4 +2,5 @@
 // In Tauri 2, the app is built as both a binary and a library.
 
 pub mod commands;
+pub mod persistence;
 pub mod state;

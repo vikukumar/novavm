@@ -81,6 +81,27 @@ impl AppState {
             logs.remove(0);
         }
     }
+
+    /// Persist all registered VMs to disk JSON storage.
+    pub async fn sync_vms_to_disk(&self) {
+        let storage_dir = self.settings.lock().default_storage_dir.clone();
+        let persistence = crate::persistence::Persistence::new(storage_dir);
+        let mut configs = Vec::new();
+        for id in self.engine.registry().ids() {
+            if let Some(handle) = self.engine.registry().get(&id) {
+                let vm = handle.read().await;
+                configs.push(vm.config().clone());
+            }
+        }
+        persistence.save_vms(&configs);
+    }
+
+    /// Persist all managed disk metadata to disk JSON storage.
+    pub fn sync_disks_to_disk(&self) {
+        let storage_dir = self.settings.lock().default_storage_dir.clone();
+        let persistence = crate::persistence::Persistence::new(storage_dir);
+        persistence.save_disks(&self.disks.read());
+    }
 }
 
 /// User-editable application settings.
