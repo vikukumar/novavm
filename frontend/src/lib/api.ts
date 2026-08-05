@@ -160,6 +160,33 @@ export const snapshotApi = {
 
 // ─── Settings Commands ────────────────────────────────────────────────────────
 
+export type EngineType =
+  | 'nova_native_whp'
+  | 'nova_native_kvm'
+  | 'nova_qemu_accelerated'
+  | 'nova_qemu_software'
+  | 'nova_simulation'
+
+export type CpuVirtTech = 'intel_vtx' | 'amd_v' | 'arm_hv' | 'none'
+
+export interface VirtualizationInfo {
+  engine: EngineType
+  cpu_virt: CpuVirtTech
+  vtx_available: boolean
+  amd_v_available: boolean
+  nested_virt: boolean
+  iommu: boolean
+  cpu_cores: number
+  total_ram_mib: number
+  max_vcpus_per_vm: number
+  max_guest_ram_mib: number
+  hypervisor_platform: string
+  engine_version: string
+  description: string
+  qemu_available: boolean
+  qemu_path: string | null
+}
+
 export const settingsApi = {
   get: (): Promise<AppSettings> => call('get_settings'),
 
@@ -172,4 +199,7 @@ export const settingsApi = {
 
   getQemuStatus: (): Promise<{ installed: boolean; path?: string; message?: string; install_url?: string }> =>
     call('get_qemu_status'),
+
+  getVirtualizationInfo: (): Promise<VirtualizationInfo> =>
+    call('get_virtualization_info'),
 }

@@ -12,6 +12,7 @@
 //! A [`NullBackend`] is always available for testing and CI on any OS.
 
 pub mod backend;
+pub mod nova_engine;
 pub mod types;
 
 use std::sync::Arc;

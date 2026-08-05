@@ -15,6 +15,7 @@ import { useMetricsStore } from '@/stores/metricsStore'
 import { cn, stateDotClass, stateColor, formatPercent, formatMib } from '@/lib/utils'
 import { toast } from '@/components/ui/use-toast'
 import { VmConsoleDisplay } from '@/components/vm/VmConsoleDisplay'
+import { settingsApi, VirtualizationInfo } from '@/lib/api'
 
 type Tab = 'overview' | 'console' | 'snapshots' | 'settings'
 
@@ -32,12 +33,17 @@ export function VmDetailPage() {
   const EMPTY_HISTORY = useRef<import('@/types').VmMetrics[]>([]).current
   const vmHistory = useMetricsStore((s) => (id ? s.vmHistory[id] : undefined) ?? EMPTY_HISTORY)
 
-  // Fetch VMs on mount in case we navigated here before store synced
+  const [virtInfo, setVirtInfo] = useState<VirtualizationInfo | null>(null)
+
+  // Fetch VMs & Virt Info on mount
   useEffect(() => {
     let isMounted = true
     useVmStore.getState().fetchVms().finally(() => {
       if (isMounted) setLoading(false)
     })
+    settingsApi.getVirtualizationInfo().then((info) => {
+      if (isMounted) setVirtInfo(info)
+    }).catch(() => {})
     return () => { isMounted = false }
   }, []) // do NOT put id here — fetchVms loads all VMs anyway
 
@@ -220,9 +226,37 @@ export function VmDetailPage() {
           {/* Config summary */}
           <div className="rounded-xl border border-border bg-card p-4 col-span-full">
             <h4 className="text-sm font-medium mb-3">Configuration</h4>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-sm">
               <ConfigItem label="vCPUs" value={String(vm.cpu_vcpus)} />
               <ConfigItem label="Memory" value={formatMib(vm.memory_mib)} />
+              <ConfigItem
+                label="Virtualization Engine"
+                value={
+                  virtInfo
+                    ? virtInfo.engine === 'nova_native_whp'
+                      ? 'NovaVM Native (WHP)'
+                      : virtInfo.engine === 'nova_native_kvm'
+                      ? 'NovaVM Native (KVM)'
+                      : virtInfo.engine === 'nova_qemu_accelerated'
+                      ? 'NovaVM + QEMU (HW)'
+                      : virtInfo.engine === 'nova_qemu_software'
+                      ? 'NovaVM + QEMU (SW)'
+                      : 'NovaVM Simulation'
+                    : 'NovaVM Engine'
+                }
+              />
+              <ConfigItem
+                label="Hardware Acceleration"
+                value={
+                  virtInfo
+                    ? virtInfo.vtx_available
+                      ? 'Intel VT-x (Active)'
+                      : virtInfo.amd_v_available
+                      ? 'AMD-V (Active)'
+                      : 'Software Emulation'
+                    : 'Hardware Acceleration'
+                }
+              />
               <ConfigItem label="Group" value={vm.group ?? '—'} />
               <ConfigItem label="Tags" value={(vm.tags || []).join(', ') || '—'} />
             </div>

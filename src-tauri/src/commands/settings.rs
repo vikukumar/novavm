@@ -3,6 +3,7 @@
 use tauri::State;
 
 use api::ApiResult;
+use hypervisor::nova_engine::{detect_nova_engine, NovaEngineCapabilities};
 
 use crate::state::{AppSettings, AppState};
 
@@ -86,3 +87,11 @@ pub async fn get_qemu_status() -> serde_json::Value {
     })
 }
 
+/// Return full NovaVM virtualization engine capabilities.
+/// This is the primary source of truth for the Dashboard virtualization card.
+#[tauri::command]
+pub async fn get_virtualization_info() -> NovaEngineCapabilities {
+    tokio::task::spawn_blocking(detect_nova_engine)
+        .await
+        .unwrap_or_else(|_| detect_nova_engine())
+}
