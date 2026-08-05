@@ -49,3 +49,7 @@ coverage/
 *.bak
 *.swp
 *.swo
+node_modules
+node_modules/
+dist
+dist/
