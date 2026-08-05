@@ -144,16 +144,14 @@ impl MetricsCollector {
         self.vm_history.get(vm_id).map(|h| h.iter().cloned().collect())
     }
 
-    /// Spawn a background tokio task that samples host metrics every `interval`.
-    pub fn start_background_collection(self, interval: Duration) -> tokio::task::JoinHandle<()> {
-        tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(interval);
-            loop {
-                ticker.tick().await;
-                self.sample_host();
-                tracing::trace!("Host metrics sampled");
-            }
-        })
+    /// Run background metrics collection loop sampling host metrics every `interval`.
+    pub async fn run_background_collection(self, interval: Duration) {
+        let mut ticker = tokio::time::interval(interval);
+        loop {
+            ticker.tick().await;
+            self.sample_host();
+            tracing::trace!("Host metrics sampled");
+        }
     }
 }
 

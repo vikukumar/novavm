@@ -11,20 +11,12 @@ mod state;
 
 use std::time::Duration;
 
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-
 use tauri::Manager;
 
 use monitor::MetricsCollector;
 use state::AppState;
 
 fn main() {
-    // Initialise structured logging.
-    tracing_subscriber::registry()
-        .with(fmt::layer().with_target(true).with_thread_ids(true))
-        .with(EnvFilter::from_default_env().add_directive("novavm=debug".parse().unwrap()))
-        .init();
-
     tracing::info!("NovaVM {} starting", env!("CARGO_PKG_VERSION"));
 
     // Build and run the Tauri application.
@@ -44,9 +36,10 @@ fn main() {
         .setup(|app| {
             let state: tauri::State<AppState> = app.state();
             // Spawn background metrics collection.
-            // start_background_collection takes `self: MetricsCollector` by value.
             let metrics_owned: MetricsCollector = (*state.metrics).clone();
-            drop(metrics_owned.start_background_collection(Duration::from_secs(1)));
+            tauri::async_runtime::spawn(async move {
+                metrics_owned.run_background_collection(Duration::from_secs(1)).await;
+            });
 
             // Initialise default NAT switch.
             if state.network.get_switch("default-nat").is_none() {
