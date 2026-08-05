@@ -104,6 +104,15 @@ impl Engine {
     pub async fn create_vm(&self, config: VmConfig) -> Result<Uuid, EngineError> {
         tracing::info!(name = %config.name, "Creating VM");
 
+        // Extract disk and ISO paths from the config's disk list.
+        // The first writable disk is the primary hard disk; the first read-only disk is the ISO.
+        let disk_path = config.disks.iter()
+            .find(|d| !d.read_only)
+            .map(|d| d.image_path.clone());
+        let iso_path = config.disks.iter()
+            .find(|d| d.read_only)
+            .map(|d| d.image_path.clone());
+
         // Build the hypervisor-level create request
         let hyp_req = CreateVmRequest {
             name: config.name.clone(),
@@ -115,6 +124,8 @@ impl Engine {
             },
             secure_boot: config.secure_boot,
             vtpm: config.vtpm,
+            disk_path,
+            iso_path,
         };
 
         // Create hypervisor-level handle (allocates backend resources / QEMU params)
@@ -158,6 +169,12 @@ impl Engine {
             // Re-create a hypervisor handle from the VM config.
             let config = vm.config().clone();
             drop(vm); // release write lock before creating handle
+            let disk_path = config.disks.iter()
+                .find(|d| !d.read_only)
+                .map(|d| d.image_path.clone());
+            let iso_path = config.disks.iter()
+                .find(|d| d.read_only)
+                .map(|d| d.image_path.clone());
             let hyp_req = CreateVmRequest {
                 name: config.name.clone(),
                 vcpus: config.cpu.vcpus,
@@ -168,6 +185,8 @@ impl Engine {
                 },
                 secure_boot: config.secure_boot,
                 vtpm: config.vtpm,
+                disk_path,
+                iso_path,
             };
             let hyp_handle = self.hypervisor.create_vm(hyp_req).await.map_err(|e| {
                 EngineError::Hypervisor(e.to_string())

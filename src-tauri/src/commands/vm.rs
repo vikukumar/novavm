@@ -201,3 +201,89 @@ pub async fn update_vm_config(
     state.sync_vms_to_disk().await;
     Ok(())
 }
+
+/// Open (or bring to front) the VM's graphical display window.
+///
+/// - **VirtualBox backend**: calls `VBoxManage startvm <name> --type gui`.
+///   If the VM is already running this brings its window to the front.
+/// - **QEMU backend**: the SDL window is opened automatically at start_vm time.
+///   This command returns the VNC address so the user can connect with an external viewer.
+/// - **NullBackend / unknown**: returns an error telling the user to install a hypervisor.
+#[tauri::command]
+pub async fn open_vm_display(
+    vm_id: Uuid,
+    state: State<'_, AppState>,
+) -> ApiResult<serde_json::Value> {
+    // Look up the VM so we know its name
+    let handle = state
+        .engine
+        .registry()
+        .get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+    let vm = handle.read().await;
+    let vm_name = vm.config().name.clone();
+    drop(vm);
+
+    // Detect which backend is active by querying its capabilities
+    let backend = hypervisor::detect_backend();
+    let caps = backend.capabilities().await;
+
+    match caps.backend_name.as_str() {
+        "VirtualBox" => {
+            // Bring VirtualBox GUI window to front (or start it if stopped)
+            let vbox_path_candidates = [
+                r"C:\Program Files\Oracle\VirtualBox\VBoxManage.exe",
+                r"C:\Program Files (x86)\Oracle\VirtualBox\VBoxManage.exe",
+            ];
+            let vboxmanage = vbox_path_candidates.iter()
+                .find(|&&p| std::path::Path::new(p).exists())
+                .copied()
+                .unwrap_or("VBoxManage.exe");
+
+            let result = std::process::Command::new(vboxmanage)
+                .args(["startvm", &vm_name, "--type", "gui"])
+                .output();
+
+            match result {
+                Ok(out) if out.status.success() => {
+                    let msg = format!("VirtualBox display window opened for '{vm_name}'");
+                    state.push_log("INFO", "vm", msg.clone());
+                    Ok(serde_json::json!({
+                        "backend": "VirtualBox",
+                        "status": "opened",
+                        "info": msg
+                    }))
+                }
+                Ok(out) => {
+                    let stderr = String::from_utf8_lossy(&out.stderr);
+                    // VM may already be running — that's OK
+                    if stderr.contains("already locked") || stderr.contains("running") {
+                        Ok(serde_json::json!({
+                            "backend": "VirtualBox",
+                            "status": "already_running",
+                            "info": format!("VM '{vm_name}' is already running in VirtualBox")
+                        }))
+                    } else {
+                        Err(ApiError::new("DISPLAY_ERROR", format!("VBoxManage startvm failed: {stderr}")))
+                    }
+                }
+                Err(e) => Err(ApiError::new("DISPLAY_ERROR", format!("Could not launch VBoxManage: {e}"))),
+            }
+        }
+        "QEMU" => {
+            // QEMU SDL window is opened at start time; return VNC info
+            Ok(serde_json::json!({
+                "backend": "QEMU",
+                "status": "sdl_window_active",
+                "info": format!("QEMU is running '{vm_name}'. \
+                    The SDL display window was opened when the VM started. \
+                    VNC is available at 127.0.0.1:5900 (use a VNC viewer to connect).")
+            }))
+        }
+        _ => Err(ApiError::new(
+            "NO_HYPERVISOR",
+            "No hypervisor is installed. Install VirtualBox or QEMU to run virtual machines."
+        )),
+    }
+}
+

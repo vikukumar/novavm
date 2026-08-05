@@ -67,6 +67,13 @@ export const vmApi = {
   reset: (vmId: string): Promise<void> => call('reset_vm', { vmId }),
 
   destroy: (vmId: string): Promise<void> => call('destroy_vm', { vmId }),
+
+  /** Open (or bring to front) the VM's graphical display window.
+   *  For VirtualBox: opens the native VirtualBox GUI window.
+   *  For QEMU: returns VNC info (SDL window was already opened at start).
+   */
+  openDisplay: (vmId: string): Promise<{ backend: string; status: string; info: string }> =>
+    call('open_vm_display', { vmId }),
 }
 
 // ─── Monitor Commands ─────────────────────────────────────────────────────────

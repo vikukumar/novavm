@@ -25,6 +25,13 @@ pub struct CreateVmRequest {
     pub secure_boot: bool,
     /// Enable virtual TPM.
     pub vtpm: bool,
+    /// Path to the primary virtual hard disk image on the host.
+    /// For QEMU: QCOW2 or any QEMU-supported format.
+    /// For VirtualBox: VDI, VMDK, or VHD.
+    pub disk_path: Option<String>,
+    /// Path to an installer ISO or optical disc image to boot from.
+    /// This is attached as a CD-ROM / DVD drive with highest boot priority.
+    pub iso_path: Option<String>,
 }
 
 /// An opaque handle to a hypervisor-level VM object.

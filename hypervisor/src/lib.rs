@@ -104,21 +104,30 @@ pub trait HypervisorBackend: Send + Sync + std::fmt::Debug {
 /// Detect the appropriate hypervisor backend for the current platform and return it.
 ///
 /// Priority order:
-/// 1. QEMU process backend — cross-platform, actually runs real VMs.
-///    Requires `qemu-system-x86_64` to be installed.
-/// 2. NullBackend — no-op fallback if QEMU is not found.
+/// 1. **VirtualBox** — if `VBoxManage.exe` is found. Opens a full GUI display window
+///    when VMs are started. Supports Windows, Linux, and macOS guests.
+/// 2. **QEMU** — if `qemu-system-x86_64` is found. Launches real VMs with an SDL
+///    display window and VNC server. Cross-platform.
+/// 3. **NullBackend** — no-op fallback. VMs will not actually run.
 pub fn detect_backend() -> Arc<dyn HypervisorBackend> {
-    // Always try QEMU first — it works on Windows, Linux, and macOS
+    // 1. Try VirtualBox — preferred on Windows for its full GUI display
+    if let Some(vbox) = backend::VBoxBackend::detect() {
+        tracing::info!("VirtualBox backend selected — real VM execution with GUI display enabled");
+        return Arc::new(vbox);
+    }
+
+    // 2. Try QEMU — cross-platform, real VMs via SDL window + VNC
     if let Some(qemu) = backend::QemuBackend::detect() {
         tracing::info!("QEMU backend selected — real VM execution enabled");
         return Arc::new(qemu);
     }
 
-    // QEMU not found — warn and fall back to no-op backend
+    // 3. Neither found — warn and fall back to no-op backend
     tracing::warn!(
-        "QEMU (qemu-system-x86_64) not found on this system. \
+        "Neither VirtualBox nor QEMU found on this system. \
         Virtual machines will NOT actually run. \
-        Please install QEMU from https://www.qemu.org/download/"
+        Install VirtualBox from https://www.virtualbox.org/wiki/Downloads \
+        or QEMU from https://www.qemu.org/download/"
     );
     Arc::new(backend::NullBackend)
 }
@@ -145,6 +154,8 @@ mod tests {
             firmware: crate::types::FirmwareType::Uefi,
             secure_boot: false,
             vtpm: false,
+            disk_path: None,
+            iso_path: None,
         };
         let handle = backend.create_vm(req).await.unwrap();
         backend.start_vm(&handle).await.unwrap();

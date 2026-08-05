@@ -99,6 +99,7 @@ fn main() {
             commands::vm::reset_vm,
             commands::vm::destroy_vm,
             commands::vm::update_vm_config,
+            commands::vm::open_vm_display,
             // Monitor commands
             commands::monitor::get_host_metrics,
             commands::monitor::get_vm_metrics,

@@ -109,7 +109,12 @@ pub struct DiskImage {
 }
 
 impl DiskImage {
-    /// Create a new thin-provisioned NovaDisk image at the given path.
+    /// Create a new thin-provisioned disk image at the given path.
+    ///
+    /// Produces a real QCOW2 disk image using `qemu-img create -f qcow2`.
+    /// The QCOW2 format is thin-provisioned by default — only metadata is
+    /// allocated initially, data sectors are allocated on first write.
+    /// Falls back to writing only the metadata sidecar if `qemu-img` is absent.
     pub async fn create(
         path: PathBuf,
         name: String,
@@ -117,16 +122,23 @@ impl DiskImage {
         encrypted: bool,
         compressed: bool,
     ) -> Result<Self, StorageError> {
+        let virtual_size_gib = virtual_size_bytes / (1024 * 1024 * 1024);
         tracing::info!(
             ?path,
-            virtual_size_gib = virtual_size_bytes / (1024 * 1024 * 1024),
+            virtual_size_gib,
             encrypted,
             compressed,
-            "Creating NovaDisk image"
+            "Creating QCOW2 disk image via qemu-img"
         );
+
+        // Ensure the parent directory exists.
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await.ok();
+        }
 
         let total_clusters = virtual_size_bytes.div_ceil(DEFAULT_CLUSTER_SIZE as u64);
 
+        // Build metadata first — used regardless of whether qemu-img succeeds.
         let metadata = DiskMetadata {
             id: Uuid::new_v4(),
             name,
@@ -135,7 +147,7 @@ impl DiskImage {
             cluster_size_bytes: DEFAULT_CLUSTER_SIZE,
             allocated_clusters: 0, // thin: nothing allocated yet
             total_clusters,
-            format: DiskFormat::NovaDisk,
+            format: DiskFormat::Qcow2,
             encrypted,
             compressed,
             thin_provisioned: true,
@@ -144,7 +156,62 @@ impl DiskImage {
             parent_snapshot_id: None,
         };
 
-        // Write header and metadata sidecar.
+        // Invoke qemu-img to create the real QCOW2 binary disk image.
+        // qemu-img is bundled with every QEMU Windows installation.
+        let size_arg = format!("{}G", virtual_size_gib.max(1));
+        let qemu_img_candidates: &[&str] = &[
+            r"C:\Program Files\qemu\qemu-img.exe",
+            r"C:\Program Files (x86)\qemu\qemu-img.exe",
+            r"C:\tools\qemu\qemu-img.exe",
+            r"C:\ProgramData\chocolatey\bin\qemu-img.exe",
+            "qemu-img.exe", // PATH
+            "qemu-img",     // Linux / macOS PATH
+        ];
+
+        let qemu_img_bin = qemu_img_candidates.iter().find(|&&bin| {
+            if bin.contains('\\') || bin.contains('/') {
+                std::path::Path::new(bin).exists()
+            } else {
+                // Check PATH via 'where' (Windows) or 'which' (Unix)
+                #[cfg(target_os = "windows")]
+                let ok = std::process::Command::new("where").arg(bin).output()
+                    .map(|o| o.status.success()).unwrap_or(false);
+                #[cfg(not(target_os = "windows"))]
+                let ok = std::process::Command::new("which").arg(bin).output()
+                    .map(|o| o.status.success()).unwrap_or(false);
+                ok
+            }
+        });
+
+        match qemu_img_bin {
+            Some(&bin) => {
+                tracing::info!(bin, %size_arg, ?path, "Invoking qemu-img to create QCOW2 image");
+                let output = tokio::process::Command::new(bin)
+                    .args(["create", "-f", "qcow2", "-o", "lazy_refcounts=on"])
+                    .arg(&path)
+                    .arg(&size_arg)
+                    .output()
+                    .await
+                    .map_err(|e| StorageError::Io(e))?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(StorageError::Internal(format!(
+                        "qemu-img create failed: {stderr}"
+                    )));
+                }
+                tracing::info!(?path, "QCOW2 disk image created successfully");
+            }
+            None => {
+                tracing::warn!(
+                    ?path,
+                    "qemu-img not found — disk metadata will be saved but no binary image file \
+                     will be created. Install QEMU to enable real disk image creation."
+                );
+            }
+        }
+
+        // Write JSON metadata sidecar alongside the disk image.
         let meta_path = path.with_extension("novadisk.meta");
         let json = serde_json::to_string_pretty(&metadata)?;
         tokio::fs::write(&meta_path, json).await?;

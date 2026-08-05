@@ -318,8 +318,8 @@ impl HypervisorBackend for QemuBackend {
             vcpus: req.vcpus,
             memory_mib: req.memory_mib,
             uefi: req.firmware == FirmwareType::Uefi,
-            disk_path: None,   // set at start_vm time from VmConfig
-            iso_path: None,    // set at start_vm time from VmConfig
+            disk_path: req.disk_path,
+            iso_path: req.iso_path,
             vnc_slot: next_vnc_slot(),
         };
 
