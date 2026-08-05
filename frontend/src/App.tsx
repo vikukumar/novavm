@@ -23,40 +23,35 @@ import { useUiStore } from '@/stores/uiStore'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 export default function App() {
-  const fetchVms = useVmStore((s) => s.fetchVms)
-  const startPolling = useMetricsStore((s) => s.startPolling)
-  const stopPolling = useMetricsStore((s) => s.stopPolling)
-
-  // Global keyboard shortcuts
-  const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
-  const commandPaletteOpen = useUiStore((s) => s.commandPaletteOpen)
-
   useEffect(() => {
     // Initial data load
-    fetchVms()
+    useVmStore.getState().fetchVms()
 
     // Start metrics polling every second
-    startPolling(1000)
+    useMetricsStore.getState().startPolling(1000)
 
     // Refresh VM list every 5 seconds
-    const vmRefresh = setInterval(fetchVms, 5000)
+    const vmRefresh = setInterval(() => {
+      useVmStore.getState().fetchVms()
+    }, 5000)
 
     return () => {
-      stopPolling()
+      useMetricsStore.getState().stopPolling()
       clearInterval(vmRefresh)
     }
-  }, [fetchVms, startPolling, stopPolling])
+  }, [])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        setCommandPaletteOpen(!commandPaletteOpen)
+        const current = useUiStore.getState().commandPaletteOpen
+        useUiStore.getState().setCommandPaletteOpen(!current)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [commandPaletteOpen, setCommandPaletteOpen])
+  }, [])
 
   return (
     <ThemeProvider>
