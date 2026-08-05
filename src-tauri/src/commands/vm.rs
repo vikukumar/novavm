@@ -39,8 +39,10 @@ pub async fn create_vm(
     request: CreateVmRequest,
     state: State<'_, AppState>,
 ) -> ApiResult<CreateVmResponse> {
+    let name = request.config.name.clone();
     let vm_id = state.engine.create_vm(request.config).await.map_err(ApiError::from)?;
     state.metrics.register_vm(vm_id);
+    state.push_log("INFO", "vm", format!("Virtual machine '{name}' (ID: {vm_id}) created successfully"));
     tracing::info!(%vm_id, "VM created via Tauri command");
     Ok(CreateVmResponse { vm_id })
 }
@@ -48,31 +50,41 @@ pub async fn create_vm(
 /// Start a VM.
 #[tauri::command]
 pub async fn start_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.start_vm(vm_id).await.map_err(ApiError::from)
+    state.engine.start_vm(vm_id).await.map_err(ApiError::from)?;
+    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} started"));
+    Ok(())
 }
 
 /// Pause a VM.
 #[tauri::command]
 pub async fn pause_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.pause_vm(vm_id).await.map_err(ApiError::from)
+    state.engine.pause_vm(vm_id).await.map_err(ApiError::from)?;
+    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} paused"));
+    Ok(())
 }
 
 /// Resume a VM.
 #[tauri::command]
 pub async fn resume_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.resume_vm(vm_id).await.map_err(ApiError::from)
+    state.engine.resume_vm(vm_id).await.map_err(ApiError::from)?;
+    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} resumed execution"));
+    Ok(())
 }
 
 /// Stop a VM gracefully.
 #[tauri::command]
 pub async fn stop_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.stop_vm(vm_id).await.map_err(ApiError::from)
+    state.engine.stop_vm(vm_id).await.map_err(ApiError::from)?;
+    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} stopped"));
+    Ok(())
 }
 
 /// Hard-reset a VM.
 #[tauri::command]
 pub async fn reset_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.reset_vm(vm_id).await.map_err(ApiError::from)
+    state.engine.reset_vm(vm_id).await.map_err(ApiError::from)?;
+    state.push_log("WARN", "vm", format!("Virtual machine {vm_id} hard-reset performed"));
+    Ok(())
 }
 
 /// Destroy a VM permanently.
@@ -80,6 +92,7 @@ pub async fn reset_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> 
 pub async fn destroy_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
     state.engine.destroy_vm(vm_id).await.map_err(ApiError::from)?;
     state.metrics.deregister_vm(&vm_id);
+    state.push_log("WARN", "vm", format!("Virtual machine {vm_id} destroyed and unregistered"));
     Ok(())
 }
 

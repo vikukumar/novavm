@@ -73,7 +73,7 @@ pub async fn create_switch(
     let id = state
         .network
         .create_switch_detailed(
-            name,
+            name.clone(),
             mode,
             parsed_subnet,
             parsed_gw,
@@ -83,6 +83,7 @@ pub async fn create_switch(
             adapter_name,
         )
         .map_err(|e| ApiError::new("NETWORK_ERROR", e.to_string()))?;
+    state.push_log("INFO", "network", format!("Virtual switch '{name}' ({mode:?}) created successfully"));
     Ok(id.to_string())
 }
 
@@ -117,13 +118,17 @@ pub async fn update_switch(
             dhcp_end,
             adapter_name,
         )
-        .map_err(|e| ApiError::new("NETWORK_ERROR", e.to_string()))
+        .map_err(|e| ApiError::new("NETWORK_ERROR", e.to_string()))?;
+    state.push_log("INFO", "network", format!("Virtual switch '{name}' updated"));
+    Ok(())
 }
 
 /// Delete a virtual switch.
 #[tauri::command]
 pub async fn delete_switch(name: String, state: State<'_, AppState>) -> ApiResult<()> {
-    state.network.delete_switch(&name).map_err(|e| ApiError::new("NETWORK_ERROR", e.to_string()))
+    state.network.delete_switch(&name).map_err(|e| ApiError::new("NETWORK_ERROR", e.to_string()))?;
+    state.push_log("WARN", "network", format!("Virtual switch '{name}' deleted"));
+    Ok(())
 }
 
 /// Enumerate physical network adapters available on host.

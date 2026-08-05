@@ -37,7 +37,7 @@ pub async fn create_disk(
 
     let image = storage::DiskImage::create(
         target_path,
-        name,
+        name.clone(),
         size_bytes,
         encrypted.unwrap_or(false),
         compressed.unwrap_or(false),
@@ -49,6 +49,7 @@ pub async fn create_disk(
     meta.thin_provisioned = thin_provisioned.unwrap_or(true);
 
     state.disks.write().push(meta.clone());
+    state.push_log("INFO", "storage", format!("Disk image '{name}' ({sizeGib} GiB) created successfully"));
     Ok(meta)
 }
 
@@ -84,7 +85,7 @@ pub async fn import_disk(
 
     let meta = DiskMetadata {
         id: uuid::Uuid::new_v4(),
-        name: file_name,
+        name: file_name.clone(),
         path: Some(p),
         virtual_size_bytes: size_bytes,
         cluster_size_bytes: 1024 * 1024,
@@ -100,6 +101,7 @@ pub async fn import_disk(
     };
 
     state.disks.write().push(meta.clone());
+    state.push_log("INFO", "storage", format!("Disk/ISO image '{file_name}' imported from '{path}'"));
     Ok(meta)
 }
 
@@ -121,6 +123,7 @@ pub async fn delete_disk(
                 }
             }
         }
+        state.push_log("WARN", "storage", format!("Disk image '{name}' deleted", name = removed.name));
         Ok(())
     } else {
         Err(ApiError::new("DISK_NOT_FOUND", "Disk image not found in registry"))

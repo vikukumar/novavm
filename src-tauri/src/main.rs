@@ -83,6 +83,8 @@ fn main() {
             commands::monitor::get_vm_metrics,
             commands::monitor::get_host_metrics_history,
             commands::monitor::get_vm_metrics_history,
+            commands::monitor::get_application_logs,
+            commands::monitor::clear_application_logs,
             // Network commands
             commands::network::list_switches,
             commands::network::create_switch,

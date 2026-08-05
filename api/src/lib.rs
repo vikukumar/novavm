@@ -35,6 +35,15 @@ use uuid::Uuid;
 
 // ─── Request / Response DTOs ─────────────────────────────────────────────────
 
+/// Real-time application log entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub timestamp: String,
+    pub level: String,
+    pub target: String,
+    pub message: String,
+}
+
 /// Request to create a new virtual machine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateVmRequest {

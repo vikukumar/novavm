@@ -82,6 +82,20 @@ export const monitorApi = {
     call('get_vm_metrics_history', { vmId }),
 }
 
+// ─── Logs Commands ────────────────────────────────────────────────────────────
+
+export interface LogEntry {
+  timestamp: string
+  level: string
+  target: string
+  message: string
+}
+
+export const logsApi = {
+  getLogs: (): Promise<LogEntry[]> => call('get_application_logs'),
+  clearLogs: (): Promise<void> => call('clear_application_logs'),
+}
+
 // ─── Network Commands ─────────────────────────────────────────────────────────
 
 export interface CreateSwitchParams {
