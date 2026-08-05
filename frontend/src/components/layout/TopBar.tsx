@@ -7,16 +7,16 @@ import { useMetricsStore } from '@/stores/metricsStore'
 import { cn, formatPercent, formatMib } from '@/lib/utils'
 import type { Theme } from '@/types'
 
-const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'Dashboard',
-  '/vms': 'Virtual Machines',
-  '/vms/create': 'Create VM',
-  '/storage': 'Storage',
-  '/network': 'Network',
-  '/snapshots': 'Snapshots',
-  '/logs': 'Logs',
-  '/settings': 'Settings',
-}
+const PAGE_TITLES: [string, string][] = [
+  ['/vms/create', 'Create VM'],
+  ['/vms', 'Virtual Machines'],
+  ['/dashboard', 'Dashboard'],
+  ['/storage', 'Storage'],
+  ['/network', 'Network'],
+  ['/snapshots', 'Snapshots'],
+  ['/logs', 'Logs'],
+  ['/settings', 'Settings'],
+]
 
 export function TopBar() {
   const location = useLocation()
@@ -28,7 +28,7 @@ export function TopBar() {
   const hostMetrics = useMetricsStore((s) => s.hostMetrics)
 
   const title =
-    Object.entries(PAGE_TITLES).find(([path]) =>
+    PAGE_TITLES.find(([path]) =>
       location.pathname === path || location.pathname.startsWith(path + '/'),
     )?.[1] ?? 'NovaVM'
 

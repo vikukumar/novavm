@@ -41,7 +41,11 @@ export const useVmStore = create<VmStore>((set, get) => ({
   createVm: async (config) => {
     const result = await vmApi.create(config)
     await get().fetchVms()
-    return result.vm_id
+    const id = result?.vm_id || (result as unknown as { vmId?: string })?.vmId
+    if (!id) {
+      throw new Error('VM creation completed but backend did not return a valid VM ID.')
+    }
+    return String(id)
   },
 
   startVm: async (id) => {

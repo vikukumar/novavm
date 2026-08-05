@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AnimatePresence } from 'framer-motion'
 
 import { Layout } from '@/components/layout/Layout'
 import { CommandPalette } from '@/components/layout/CommandPalette'
@@ -20,28 +19,6 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { useVmStore } from '@/stores/vmStore'
 import { useMetricsStore } from '@/stores/metricsStore'
 import { useUiStore } from '@/stores/uiStore'
-
-import { useLocation } from 'react-router-dom'
-
-function AnimatedRoutes() {
-  const location = useLocation()
-  return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/vms" element={<VmListPage />} />
-        <Route path="/vms/create" element={<CreateVmWizard />} />
-        <Route path="/vms/:id" element={<VmDetailPage />} />
-        <Route path="/storage" element={<StoragePage />} />
-        <Route path="/network" element={<NetworkPage />} />
-        <Route path="/snapshots" element={<SnapshotPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Routes>
-    </AnimatePresence>
-  )
-}
 
 export default function App() {
   const fetchVms = useVmStore((s) => s.fetchVms)
@@ -85,7 +62,18 @@ export default function App() {
         <BrowserRouter>
           <CommandPalette />
           <Layout>
-            <AnimatedRoutes />
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/vms" element={<VmListPage />} />
+              <Route path="/vms/create" element={<CreateVmWizard />} />
+              <Route path="/vms/:id" element={<VmDetailPage />} />
+              <Route path="/storage" element={<StoragePage />} />
+              <Route path="/network" element={<NetworkPage />} />
+              <Route path="/snapshots" element={<SnapshotPage />} />
+              <Route path="/logs" element={<LogsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
           </Layout>
         </BrowserRouter>
       </ToastProvider>
