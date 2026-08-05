@@ -24,19 +24,18 @@ export function VmDetailPage() {
   const [loading, setLoading] = useState(true)
 
   const vm = useVmStore((s) => s.vms.find((v) => v.id === id))
-  const { startVm, pauseVm, resumeVm, stopVm, resetVm, destroyVm, fetchVms } = useVmStore()
+  const { startVm, pauseVm, resumeVm, stopVm, resetVm, destroyVm } = useVmStore()
   const vmMetrics = useMetricsStore((s) => (id ? s.vmMetrics[id] : null))
   const vmHistory = useMetricsStore((s) => (id ? s.vmHistory[id] ?? [] : []))
 
   // Fetch VMs on mount in case we navigated here before store synced
   useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      await fetchVms()
-      setLoading(false)
-    }
-    load()
-  }, [fetchVms, id])
+    let isMounted = true
+    useVmStore.getState().fetchVms().finally(() => {
+      if (isMounted) setLoading(false)
+    })
+    return () => { isMounted = false }
+  }, [id])
 
   if (loading && !vm) {
     return (

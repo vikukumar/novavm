@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
 import { ScrollText, Search, Trash2, Copy, RefreshCw, Check } from 'lucide-react'
 import { logsApi, type LogEntry } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -75,7 +74,7 @@ export function LogsPage() {
   })
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-6xl mx-auto space-y-5">
+    <div className="max-w-6xl mx-auto space-y-5">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -193,6 +192,6 @@ export function LogsPage() {
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }

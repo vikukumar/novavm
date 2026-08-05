@@ -40,62 +40,118 @@ pub async fn create_vm(
     state: State<'_, AppState>,
 ) -> ApiResult<CreateVmResponse> {
     let name = request.config.name.clone();
-    let vm_id = state.engine.create_vm(request.config).await.map_err(ApiError::from)?;
-    state.metrics.register_vm(vm_id);
-    state.push_log("INFO", "vm", format!("Virtual machine '{name}' (ID: {vm_id}) created successfully"));
-    state.sync_vms_to_disk().await;
-    tracing::info!(%vm_id, "VM created via Tauri command");
-    Ok(CreateVmResponse { vm_id })
+    match state.engine.create_vm(request.config).await {
+        Ok(vm_id) => {
+            state.metrics.register_vm(vm_id);
+            state.push_log("INFO", "vm", format!("Virtual machine '{name}' (ID: {vm_id}) created successfully"));
+            state.sync_vms_to_disk().await;
+            tracing::info!(%vm_id, "VM created via Tauri command");
+            Ok(CreateVmResponse { vm_id })
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to create virtual machine '{name}': {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Start a VM.
 #[tauri::command]
 pub async fn start_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.start_vm(vm_id).await.map_err(ApiError::from)?;
-    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} started"));
-    Ok(())
+    match state.engine.start_vm(vm_id).await {
+        Ok(()) => {
+            state.push_log("INFO", "vm", format!("Virtual machine {vm_id} started successfully"));
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to start virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Pause a VM.
 #[tauri::command]
 pub async fn pause_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.pause_vm(vm_id).await.map_err(ApiError::from)?;
-    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} paused"));
-    Ok(())
+    match state.engine.pause_vm(vm_id).await {
+        Ok(()) => {
+            state.push_log("INFO", "vm", format!("Virtual machine {vm_id} paused"));
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to pause virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Resume a VM.
 #[tauri::command]
 pub async fn resume_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.resume_vm(vm_id).await.map_err(ApiError::from)?;
-    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} resumed execution"));
-    Ok(())
+    match state.engine.resume_vm(vm_id).await {
+        Ok(()) => {
+            state.push_log("INFO", "vm", format!("Virtual machine {vm_id} resumed execution"));
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to resume virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Stop a VM gracefully.
 #[tauri::command]
 pub async fn stop_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.stop_vm(vm_id).await.map_err(ApiError::from)?;
-    state.push_log("INFO", "vm", format!("Virtual machine {vm_id} stopped"));
-    Ok(())
+    match state.engine.stop_vm(vm_id).await {
+        Ok(()) => {
+            state.push_log("INFO", "vm", format!("Virtual machine {vm_id} stopped"));
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to stop virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Hard-reset a VM.
 #[tauri::command]
 pub async fn reset_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.reset_vm(vm_id).await.map_err(ApiError::from)?;
-    state.push_log("WARN", "vm", format!("Virtual machine {vm_id} hard-reset performed"));
-    Ok(())
+    match state.engine.reset_vm(vm_id).await {
+        Ok(()) => {
+            state.push_log("WARN", "vm", format!("Virtual machine {vm_id} hard-reset performed"));
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to reset virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Destroy a VM permanently.
 #[tauri::command]
 pub async fn destroy_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
-    state.engine.destroy_vm(vm_id).await.map_err(ApiError::from)?;
-    state.metrics.deregister_vm(&vm_id);
-    state.push_log("WARN", "vm", format!("Virtual machine {vm_id} destroyed and unregistered"));
-    state.sync_vms_to_disk().await;
-    Ok(())
+    match state.engine.destroy_vm(vm_id).await {
+        Ok(()) => {
+            state.metrics.deregister_vm(&vm_id);
+            state.push_log("WARN", "vm", format!("Virtual machine {vm_id} destroyed and unregistered"));
+            state.sync_vms_to_disk().await;
+            Ok(())
+        }
+        Err(e) => {
+            let err = ApiError::from(e);
+            state.push_log("ERROR", "vm", format!("Failed to destroy virtual machine {vm_id}: {}", err.message));
+            Err(err)
+        }
+    }
 }
 
 /// Get detailed information about a specific VM.
