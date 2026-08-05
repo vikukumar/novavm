@@ -55,11 +55,11 @@ export default function App() {
 
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <BrowserRouter>
-          <CommandPalette />
-          <Layout>
-            <ErrorBoundary>
+      <ErrorBoundary>
+        <ToastProvider>
+          <BrowserRouter>
+            <CommandPalette />
+            <Layout>
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<DashboardPage />} />
@@ -72,10 +72,10 @@ export default function App() {
                 <Route path="/logs" element={<LogsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
-            </ErrorBoundary>
-          </Layout>
-        </BrowserRouter>
-      </ToastProvider>
+            </Layout>
+          </BrowserRouter>
+        </ToastProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   )
 }

@@ -14,6 +14,7 @@ import { useVmStore } from '@/stores/vmStore'
 import { useMetricsStore } from '@/stores/metricsStore'
 import { cn, stateDotClass, stateColor, formatPercent, formatMib } from '@/lib/utils'
 import { toast } from '@/components/ui/use-toast'
+import { VmConsoleDisplay } from '@/components/vm/VmConsoleDisplay'
 
 type Tab = 'overview' | 'console' | 'snapshots' | 'settings'
 
@@ -250,14 +251,7 @@ export function VmDetailPage() {
       )}
 
       {activeTab === 'console' && (
-        <div className="rounded-xl border border-border bg-[#0d0d0d] p-4 min-h-64 font-mono text-sm text-green-400">
-          <p className="text-muted-foreground text-xs mb-2">
-            Console output (xterm.js integration placeholder)
-          </p>
-          <p>NovaVM Console — {vm.name}</p>
-          <p>State: {vm.state}</p>
-          <p className="opacity-50">Connect the guest agent for interactive console access.</p>
-        </div>
+        <VmConsoleDisplay vm={vm} />
       )}
 
       {activeTab === 'snapshots' && (
