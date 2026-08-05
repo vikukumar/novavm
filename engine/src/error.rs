@@ -16,7 +16,7 @@ pub enum EngineError {
 
     /// The hypervisor backend returned an error.
     #[error("Hypervisor error: {0}")]
-    Hypervisor(#[from] hypervisor::HypervisorError),
+    Hypervisor(String),
 
     /// A storage operation failed.
     #[error("Storage error: {0}")]

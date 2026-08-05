@@ -43,3 +43,46 @@ pub async fn get_hypervisor_info() -> ApiResult<serde_json::Value> {
         "usb_redirection": caps.usb_redirection,
     }))
 }
+
+/// Check whether QEMU is installed and return its installation status.
+#[tauri::command]
+pub async fn get_qemu_status() -> serde_json::Value {
+    let candidates: &[&str] = &[
+        r"C:\Program Files\qemu\qemu-system-x86_64.exe",
+        r"C:\Program Files (x86)\qemu\qemu-system-x86_64.exe",
+        r"C:\tools\qemu\qemu-system-x86_64.exe",
+        r"C:\ProgramData\chocolatey\bin\qemu-system-x86_64.exe",
+    ];
+
+    // Try PATH first
+    let from_path = std::process::Command::new("where")
+        .arg("qemu-system-x86_64.exe")
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout).ok().map(|s| s.lines().next().unwrap_or("").trim().to_owned())
+            } else {
+                None
+            }
+        })
+        .filter(|s| !s.is_empty());
+
+    if let Some(path) = from_path {
+        return serde_json::json!({ "installed": true, "path": path });
+    }
+
+    for &candidate in candidates {
+        if std::path::Path::new(candidate).exists() {
+            return serde_json::json!({ "installed": true, "path": candidate });
+        }
+    }
+
+    serde_json::json!({
+        "installed": false,
+        "path": null,
+        "install_url": "https://www.qemu.org/download/#windows",
+        "message": "QEMU is not installed. Virtual machines cannot start until QEMU is installed. Download from https://www.qemu.org/download/#windows"
+    })
+}
+

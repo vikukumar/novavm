@@ -24,7 +24,6 @@ interface VmCardProps {
 
 export function VmCard({ vm, compact = false }: VmCardProps) {
   const navigate = useNavigate()
-  const { startVm, pauseVm, resumeVm, stopVm, destroyVm } = useVmStore()
   const [confirmDestroy, setConfirmDestroy] = useState(false)
 
   const handleAction = async (
@@ -110,7 +109,7 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
           <ActionBtn
             icon={<Play size={12} />}
             label="Start"
-            onClick={() => handleAction(() => startVm(vm.id), 'Start')}
+            onClick={() => handleAction(() => useVmStore.getState().startVm(vm.id), 'Start')}
             className="hover:bg-emerald-500/20 hover:text-emerald-500"
           />
         )}
@@ -118,14 +117,14 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
           <ActionBtn
             icon={<Pause size={12} />}
             label="Pause"
-            onClick={() => handleAction(() => pauseVm(vm.id), 'Pause')}
+            onClick={() => handleAction(() => useVmStore.getState().pauseVm(vm.id), 'Pause')}
           />
         )}
         {canResume && (
           <ActionBtn
             icon={<Play size={12} />}
             label="Resume"
-            onClick={() => handleAction(() => resumeVm(vm.id), 'Resume')}
+            onClick={() => handleAction(() => useVmStore.getState().resumeVm(vm.id), 'Resume')}
             className="hover:bg-emerald-500/20 hover:text-emerald-500"
           />
         )}
@@ -133,7 +132,7 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
           <ActionBtn
             icon={<Square size={12} />}
             label="Stop"
-            onClick={() => handleAction(() => stopVm(vm.id), 'Stop')}
+            onClick={() => handleAction(() => useVmStore.getState().stopVm(vm.id), 'Stop')}
             className="hover:bg-amber-500/20 hover:text-amber-500"
           />
         )}
@@ -158,7 +157,7 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
         variant="danger"
         onConfirm={async () => {
           setConfirmDestroy(false)
-          await handleAction(() => destroyVm(vm.id), 'Destroy')
+          await handleAction(() => useVmStore.getState().destroyVm(vm.id), 'Destroy')
         }}
         onClose={() => setConfirmDestroy(false)}
       />

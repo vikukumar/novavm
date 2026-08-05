@@ -1,35 +1,52 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Play, Pause, Square, RotateCcw, Monitor,
-  Maximize2, Minimize2, Disc, ShieldAlert
+  Maximize2, Minimize2, Disc, ShieldAlert, AlertTriangle, ExternalLink
 } from 'lucide-react'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { VmSummary } from '@/types'
 import { useVmStore } from '@/stores/vmStore'
+import { settingsApi } from '@/lib/api'
 import { toast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 
+// Props use only primitives — no VmSummary object reference to prevent re-render loops
 interface VmConsoleDisplayProps {
-  vm: VmSummary
+  vmId: string
+  vmName: string
+  vmState: string
+  vcpus: number
+  memoryMib: number
 }
 
-export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
-  const { startVm, pauseVm, resumeVm, stopVm, resetVm } = useVmStore()
+export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: VmConsoleDisplayProps) {
   const [fullscreen, setFullscreen] = useState(false)
   const [commandInput, setCommandInput] = useState('')
   const [consoleLogs, setConsoleLogs] = useState<string[]>([])
   const [mountedIso, setMountedIso] = useState<string | null>(null)
   const [grabbingInput, setGrabbingInput] = useState(false)
+  const [qemuStatus, setQemuStatus] = useState<{ installed: boolean; path?: string; message?: string; install_url?: string } | null>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
 
-  // Append boot logs when VM starts running
+  // Check QEMU installation status once on mount
   useEffect(() => {
-    if (vm.state === 'running') {
-      const initialBootSequence = [
+    settingsApi.getQemuStatus()
+      .then(setQemuStatus)
+      .catch(() => setQemuStatus({ installed: false, message: 'Could not check QEMU status.' }))
+  }, [])
+
+  // Track previous state with a ref — avoids stale closure / re-run loops
+  const prevStateRef = useRef<string>('')
+
+  useEffect(() => {
+    if (prevStateRef.current === vmState) return
+    prevStateRef.current = vmState
+
+    if (vmState === 'running') {
+      setConsoleLogs([
         'NovaVM Hypervisor BIOS v1.0.0 (x86_64)',
         'Copyright (C) 2026 NovaVM Virtualization Project.',
-        'Initialising CPU topology: ' + vm.cpu_vcpus + ' vCPUs assigned.',
-        'Allocating guest RAM: ' + vm.memory_mib + ' MiB ... OK.',
+        `Initialising CPU topology: ${vcpus} vCPUs assigned.`,
+        `Allocating guest RAM: ${memoryMib} MiB ... OK.`,
         'Detecting Storage: QEMU / VirtIO Block Device initialized.',
         'Network Adapter: VirtIO NIC attached to VMnet8 (NAT).',
         'Booting Linux Kernel 6.8.0-generic ...',
@@ -45,12 +62,11 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
         'Welcome to NovaVM Guest Workstation environment.',
         'Type "help" or "status" for available hypervisor commands.',
         ' ',
-      ]
-      setConsoleLogs(initialBootSequence)
-    } else if (vm.state === 'stopped') {
+      ])
+    } else if (vmState === 'stopped') {
       setConsoleLogs(['System Powered Off'])
     }
-  }, [vm.state, vm.cpu_vcpus, vm.memory_mib])
+  }, [vmState, vcpus, memoryMib])
 
   // Auto scroll console text
   useEffect(() => {
@@ -65,34 +81,40 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
 
     const cmd = commandInput.trim()
     const timestamp = new Date().toLocaleTimeString()
-    const output: string[] = [`root@novavm:~# ${cmd}`]
+    let outputLines: string[] = [`root@novavm:~# ${cmd}`]
 
     if (cmd === 'help') {
-      output.push('Available guest commands:')
-      output.push('  status   - Print VM hardware status')
-      output.push('  uname -a - Print guest kernel architecture')
-      output.push('  ifconfig - Print virtual network interface details')
-      output.push('  clear    - Clear console screen')
+      outputLines = [...outputLines,
+        'Available guest commands:',
+        '  status   - Print VM hardware status',
+        '  uname -a - Print guest kernel architecture',
+        '  ifconfig - Print virtual network interface details',
+        '  clear    - Clear console screen',
+      ]
     } else if (cmd === 'status') {
-      output.push(`VM Name: ${vm.name}`)
-      output.push(`State: ${vm.state}`)
-      output.push(`vCPUs: ${vm.cpu_vcpus}`)
-      output.push(`Memory: ${vm.memory_mib} MiB`)
+      outputLines = [...outputLines,
+        `VM Name: ${vmName}`,
+        `State: ${vmState}`,
+        `vCPUs: ${vcpus}`,
+        `Memory: ${memoryMib} MiB`,
+      ]
     } else if (cmd === 'uname -a') {
-      output.push('Linux novavm-guest 6.8.0-generic #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux')
+      outputLines = [...outputLines, 'Linux novavm-guest 6.8.0-generic #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux']
     } else if (cmd === 'ifconfig') {
-      output.push('ens3: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500')
-      output.push('        inet 192.168.122.105  netmask 255.255.255.0  broadcast 192.168.122.255')
-      output.push('        rx_packets 1420  bytes 1892040  tx_packets 980  bytes 124010')
+      outputLines = [...outputLines,
+        'ens3: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500',
+        '        inet 192.168.122.105  netmask 255.255.255.0  broadcast 192.168.122.255',
+        '        rx_packets 1420  bytes 1892040  tx_packets 980  bytes 124010',
+      ]
     } else if (cmd === 'clear') {
       setConsoleLogs([])
       setCommandInput('')
       return
     } else {
-      output.push(`sh: command not found: ${cmd}. Type "help" for list of commands.`)
+      outputLines = [...outputLines, `sh: command not found: ${cmd}. Type "help" for list of commands.`]
     }
 
-    setConsoleLogs((prev) => [...prev, `[${timestamp}] ` + output.join('\n')])
+    setConsoleLogs((prev) => [...prev, `[${timestamp}]`, ...outputLines])
     setCommandInput('')
   }
 
@@ -124,12 +146,43 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
       'rounded-2xl border border-border bg-[#0a0a0a] overflow-hidden shadow-2xl transition-all',
       fullscreen && 'fixed inset-0 z-50 rounded-none border-none'
     )}>
+
+      {/* QEMU Not Installed Warning Banner */}
+      {qemuStatus && !qemuStatus.installed && (
+        <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border-b border-amber-500/30 text-amber-300">
+          <AlertTriangle size={16} className="mt-0.5 flex-shrink-0" />
+          <div className="text-xs flex-1">
+            <p className="font-semibold">QEMU Not Installed — Virtual Machines Cannot Start</p>
+            <p className="text-amber-400/80 mt-0.5">
+              {qemuStatus.message ?? 'Install QEMU to run real virtual machines.'}
+            </p>
+          </div>
+          {qemuStatus.install_url && (
+            <a
+              href={qemuStatus.install_url}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-100 transition-colors whitespace-nowrap"
+            >
+              Download QEMU <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* QEMU Installed — Show path */}
+      {qemuStatus?.installed && (
+        <div className="flex items-center gap-2 px-4 py-1.5 bg-emerald-500/8 border-b border-emerald-500/20 text-xs text-emerald-400/70">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          QEMU: {qemuStatus.path}
+        </div>
+      )}
       {/* VMware Header / Control Bar */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-[#141414] border-b border-border/60 text-xs text-muted-foreground select-none gap-2">
         <div className="flex items-center gap-2.5">
           <Monitor size={15} className="text-primary" />
           <span className="font-semibold text-foreground tracking-wide">
-            VMware Workstation Console — {vm.name}
+            VMware Workstation Console — {vmName}
           </span>
           <span className="px-2 py-0.5 rounded bg-muted/60 text-[11px] font-mono text-muted-foreground border border-border/40">
             SVGA II 1920x1080 60Hz
@@ -138,9 +191,9 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
 
         {/* Toolbar Action Buttons */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          {vm.state === 'stopped' && (
+          {vmState === 'stopped' && (
             <button
-              onClick={() => startVm(vm.id)}
+              onClick={() => useVmStore.getState().startVm(vmId)}
               className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 rounded border border-emerald-500/30 font-medium transition-colors"
             >
               <Play size={12} />
@@ -148,24 +201,24 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
             </button>
           )}
 
-          {vm.state === 'running' && (
+          {vmState === 'running' && (
             <>
               <button
-                onClick={() => pauseVm(vm.id)}
+                onClick={() => useVmStore.getState().pauseVm(vmId)}
                 className="flex items-center gap-1 px-2.5 py-1 bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 rounded border border-amber-500/30 font-medium transition-colors"
               >
                 <Pause size={12} />
                 Pause
               </button>
               <button
-                onClick={() => stopVm(vm.id)}
+                onClick={() => useVmStore.getState().stopVm(vmId)}
                 className="flex items-center gap-1 px-2.5 py-1 bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 rounded border border-rose-500/30 font-medium transition-colors"
               >
                 <Square size={12} />
                 Power Off
               </button>
               <button
-                onClick={() => resetVm(vm.id)}
+                onClick={() => useVmStore.getState().resetVm(vmId)}
                 className="flex items-center gap-1 px-2.5 py-1 bg-muted hover:bg-accent rounded border border-border font-medium transition-colors"
               >
                 <RotateCcw size={12} />
@@ -174,9 +227,9 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
             </>
           )}
 
-          {vm.state === 'paused' && (
+          {vmState === 'paused' && (
             <button
-              onClick={() => resumeVm(vm.id)}
+              onClick={() => useVmStore.getState().resumeVm(vmId)}
               className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 rounded border border-emerald-500/30 font-medium transition-colors"
             >
               <Play size={12} />
@@ -188,7 +241,7 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
 
           <button
             onClick={handleSendCtrlAltDel}
-            disabled={vm.state !== 'running'}
+            disabled={vmState !== 'running'}
             className="flex items-center gap-1 px-2.5 py-1 bg-muted/60 hover:bg-accent disabled:opacity-40 rounded border border-border/50 font-medium transition-colors"
             title="Send Ctrl+Alt+Del to Guest OS"
           >
@@ -221,13 +274,13 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
         className="relative bg-[#050505] p-6 font-mono text-xs text-green-400 min-h-[380px] flex flex-col justify-between cursor-text select-text"
       >
         {/* Screen Watermark when Powered Off */}
-        {vm.state === 'stopped' && (
+        {vmState === 'stopped' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 text-muted-foreground gap-3">
             <Monitor size={48} className="opacity-30 text-primary" />
             <p className="text-base font-semibold text-foreground/80">Virtual Machine Power Off</p>
-            <p className="text-xs">Click "Power On" to boot VMware Graphics Display for {vm.name}.</p>
+            <p className="text-xs">Click "Power On" to boot VMware Graphics Display for {vmName}.</p>
             <button
-              onClick={() => startVm(vm.id)}
+              onClick={() => useVmStore.getState().startVm(vmId)}
               className="mt-2 flex items-center gap-2 px-5 py-2 text-xs font-semibold bg-emerald-500 text-black hover:bg-emerald-400 rounded-xl transition-all shadow-lg"
             >
               <Play size={14} />
@@ -237,12 +290,12 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
         )}
 
         {/* Screen Watermark when Paused */}
-        {vm.state === 'paused' && (
+        {vmState === 'paused' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm text-muted-foreground gap-3 z-10">
             <Pause size={48} className="opacity-40 text-amber-400" />
             <p className="text-base font-semibold text-foreground">VMware Console Paused</p>
             <button
-              onClick={() => resumeVm(vm.id)}
+              onClick={() => useVmStore.getState().resumeVm(vmId)}
               className="px-4 py-2 text-xs font-semibold bg-amber-500 text-black hover:bg-amber-400 rounded-xl transition-colors"
             >
               Resume Guest Operating System
@@ -260,7 +313,7 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
         </div>
 
         {/* Interactive Console Shell Input */}
-        {vm.state === 'running' && (
+        {vmState === 'running' && (
           <form onSubmit={handleCommandSubmit} className="flex items-center gap-2 mt-4 pt-2 border-t border-green-500/20">
             <span className="text-emerald-400 font-bold flex-shrink-0">root@novavm:~#</span>
             <input
@@ -278,13 +331,13 @@ export function VmConsoleDisplay({ vm }: VmConsoleDisplayProps) {
       <div className="flex items-center justify-between px-4 py-1.5 bg-[#0f0f0f] border-t border-border/40 text-[11px] text-muted-foreground select-none">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">
-            <span className={cn('w-2 h-2 rounded-full', vm.state === 'running' ? 'bg-emerald-500' : 'bg-slate-500')} />
-            {vm.state.toUpperCase()}
+            <span className={cn('w-2 h-2 rounded-full', vmState === 'running' ? 'bg-emerald-500' : 'bg-slate-500')} />
+            {vmState.toUpperCase()}
           </span>
           <span>·</span>
-          <span>{vm.cpu_vcpus} vCPU</span>
+          <span>{vcpus} vCPU</span>
           <span>·</span>
-          <span>{vm.memory_mib} MiB RAM</span>
+          <span>{memoryMib} MiB RAM</span>
         </div>
 
         <div className="flex items-center gap-3">

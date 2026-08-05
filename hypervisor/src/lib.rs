@@ -101,27 +101,25 @@ pub trait HypervisorBackend: Send + Sync + std::fmt::Debug {
 }
 
 /// Detect the appropriate hypervisor backend for the current platform and return it.
+///
+/// Priority order:
+/// 1. QEMU process backend — cross-platform, actually runs real VMs.
+///    Requires `qemu-system-x86_64` to be installed.
+/// 2. NullBackend — no-op fallback if QEMU is not found.
 pub fn detect_backend() -> Arc<dyn HypervisorBackend> {
-    #[cfg(target_os = "windows")]
-    {
-        tracing::info!("Detected platform: Windows — using WHP backend");
-        Arc::new(backend::WhpBackend::new())
+    // Always try QEMU first — it works on Windows, Linux, and macOS
+    if let Some(qemu) = backend::QemuBackend::detect() {
+        tracing::info!("QEMU backend selected — real VM execution enabled");
+        return Arc::new(qemu);
     }
-    #[cfg(target_os = "linux")]
-    {
-        tracing::info!("Detected platform: Linux — using KVM backend");
-        Arc::new(backend::KvmBackend::new())
-    }
-    #[cfg(target_os = "macos")]
-    {
-        tracing::info!("Detected platform: macOS — using AVF backend");
-        Arc::new(backend::AvfBackend::new())
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-    {
-        tracing::warn!("Unknown platform — falling back to NullBackend");
-        Arc::new(backend::NullBackend)
-    }
+
+    // QEMU not found — warn and fall back to no-op backend
+    tracing::warn!(
+        "QEMU (qemu-system-x86_64) not found on this system. \
+        Virtual machines will NOT actually run. \
+        Please install QEMU from https://www.qemu.org/download/"
+    );
+    Arc::new(backend::NullBackend)
 }
 
 #[cfg(test)]

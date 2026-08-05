@@ -231,6 +231,18 @@ impl VirtualMachine {
         self.updated_at = Utc::now();
     }
 
+    /// Force the VM into Stopped state without validating from-state.
+    /// Used for rollback after a failed hypervisor start.
+    pub fn force_stopped(&mut self) {
+        self.transition(VmState::Stopped);
+    }
+
+    /// Force the VM into Running state without validating from-state.
+    /// Used when we re-create a hypervisor handle for a restored VM.
+    pub fn force_running(&mut self) {
+        self.transition(VmState::Running);
+    }
+
     fn require_state(&self, required: VmState, action: &'static str) -> Result<(), EngineError> {
         if self.state != required {
             Err(EngineError::InvalidStateTransition {

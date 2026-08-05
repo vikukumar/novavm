@@ -1,10 +1,12 @@
 //! Hypervisor backend implementations.
 //!
-//! Each backend is gated behind a `cfg` attribute so only the platform-native
-//! implementation compiles on each target. The `NullBackend` always compiles
-//! and is used for testing and unsupported platforms.
+//! Backend selection priority:
+//! 1. QEMU process backend (cross-platform, actually runs real VMs) — preferred.
+//! 2. Platform-native backends (WHP/KVM/AVF) — stubs, kept for future native implementation.
+//! 3. NullBackend — no-op, used for testing only.
 
 mod null;
+mod qemu;
 
 #[cfg(target_os = "windows")]
 mod whp;
@@ -16,6 +18,7 @@ mod kvm;
 mod avf;
 
 pub use null::NullBackend;
+pub use qemu::QemuBackend;
 
 #[cfg(target_os = "windows")]
 pub use whp::WhpBackend;

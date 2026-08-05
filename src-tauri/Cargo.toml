@@ -51,7 +51,10 @@ snapshot = { workspace = true }
 hypervisor = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = ["Win32_Foundation"] }
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Hypervisor",
+] }
 
 [features]
 default = ["custom-protocol"]

@@ -15,6 +15,8 @@ use tokio::sync::RwLock;
 use tracing::instrument;
 use uuid::Uuid;
 
+use hypervisor::{detect_backend, types::CreateVmRequest, HypervisorBackend};
+
 pub use config::VmConfig;
 pub use error::EngineError;
 pub use vm::{VirtualMachine, VmState};
@@ -74,13 +76,22 @@ impl VmRegistry {
 /// Top-level engine handle. Holds references to all sub-systems.
 pub struct Engine {
     registry: VmRegistry,
+    /// The active hypervisor backend (QEMU process, WHP, KVM, etc.)
+    hypervisor: Arc<dyn HypervisorBackend>,
+    /// Hypervisor-level VM handles, keyed by engine-level VM UUID.
+    handles: DashMap<Uuid, hypervisor::types::VmHandle>,
 }
 
 impl Engine {
     /// Create and initialise a new engine instance.
     pub fn new() -> Self {
+        let hypervisor = detect_backend();
         tracing::info!("Initialising NovaVM engine");
-        Self { registry: VmRegistry::new() }
+        Self {
+            registry: VmRegistry::new(),
+            hypervisor,
+            handles: DashMap::new(),
+        }
     }
 
     /// Expose the VM registry for external use (e.g. Tauri commands).
@@ -92,8 +103,32 @@ impl Engine {
     #[instrument(skip(self))]
     pub async fn create_vm(&self, config: VmConfig) -> Result<Uuid, EngineError> {
         tracing::info!(name = %config.name, "Creating VM");
+
+        // Build the hypervisor-level create request
+        let hyp_req = CreateVmRequest {
+            name: config.name.clone(),
+            vcpus: config.cpu.vcpus,
+            memory_mib: config.memory.size_mib,
+            firmware: match config.firmware {
+                config::FirmwareType::Uefi => hypervisor::types::FirmwareType::Uefi,
+                config::FirmwareType::Bios => hypervisor::types::FirmwareType::Bios,
+            },
+            secure_boot: config.secure_boot,
+            vtpm: config.vtpm,
+        };
+
+        // Create hypervisor-level handle (allocates backend resources / QEMU params)
+        let hyp_handle = self.hypervisor.create_vm(hyp_req).await.map_err(|e| {
+            EngineError::Hypervisor(e.to_string())
+        })?;
+
         let vm = VirtualMachine::new(config).await?;
-        let id = self.registry.insert(vm);
+        let id = vm.id();
+        self.registry.insert(vm);
+
+        // Store the hypervisor handle so start/stop can use it
+        self.handles.insert(id, hyp_handle);
+
         tracing::info!(%id, "VM created");
         Ok(id)
     }
@@ -103,7 +138,52 @@ impl Engine {
     pub async fn start_vm(&self, id: Uuid) -> Result<(), EngineError> {
         let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
-        vm.start().await
+
+        // Get the hypervisor handle (may not exist if VM was restored from JSON)
+        let hyp_handle_opt = self.handles.get(&id).map(|r| r.clone());
+
+        vm.start().await?;
+
+        // Launch the real QEMU process
+        if let Some(hyp_handle) = hyp_handle_opt {
+            if let Err(e) = self.hypervisor.start_vm(&hyp_handle).await {
+                tracing::error!(%id, error = %e, "Hypervisor failed to start VM — state rolled back");
+                // Roll back state
+                vm.force_stopped();
+                return Err(EngineError::Hypervisor(e.to_string()));
+            }
+        } else {
+            tracing::warn!(%id, "No hypervisor handle found for VM — creating fresh one");
+            // VM may have been restored from JSON without a live handle.
+            // Re-create a hypervisor handle from the VM config.
+            let config = vm.config().clone();
+            drop(vm); // release write lock before creating handle
+            let hyp_req = CreateVmRequest {
+                name: config.name.clone(),
+                vcpus: config.cpu.vcpus,
+                memory_mib: config.memory.size_mib,
+                firmware: match config.firmware {
+                    config::FirmwareType::Uefi => hypervisor::types::FirmwareType::Uefi,
+                    config::FirmwareType::Bios => hypervisor::types::FirmwareType::Bios,
+                },
+                secure_boot: config.secure_boot,
+                vtpm: config.vtpm,
+            };
+            let hyp_handle = self.hypervisor.create_vm(hyp_req).await.map_err(|e| {
+                EngineError::Hypervisor(e.to_string())
+            })?;
+            if let Err(e) = self.hypervisor.start_vm(&hyp_handle).await {
+                return Err(EngineError::Hypervisor(e.to_string()));
+            }
+            self.handles.insert(id, hyp_handle);
+            // Re-acquire and set running state
+            let handle2 = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
+            let mut vm2 = handle2.write().await;
+            vm2.force_running();
+            return Ok(());
+        }
+
+        Ok(())
     }
 
     /// Pause a running VM.
@@ -111,7 +191,11 @@ impl Engine {
     pub async fn pause_vm(&self, id: Uuid) -> Result<(), EngineError> {
         let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
-        vm.pause().await
+        vm.pause().await?;
+        if let Some(hyp_handle) = self.handles.get(&id) {
+            let _ = self.hypervisor.pause_vm(&hyp_handle).await;
+        }
+        Ok(())
     }
 
     /// Resume a paused VM.
@@ -119,7 +203,11 @@ impl Engine {
     pub async fn resume_vm(&self, id: Uuid) -> Result<(), EngineError> {
         let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
-        vm.resume().await
+        vm.resume().await?;
+        if let Some(hyp_handle) = self.handles.get(&id) {
+            let _ = self.hypervisor.resume_vm(&hyp_handle).await;
+        }
+        Ok(())
     }
 
     /// Stop (graceful shutdown) a running VM.
@@ -127,7 +215,11 @@ impl Engine {
     pub async fn stop_vm(&self, id: Uuid) -> Result<(), EngineError> {
         let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
-        vm.stop().await
+        vm.stop().await?;
+        if let Some(hyp_handle) = self.handles.get(&id) {
+            let _ = self.hypervisor.stop_vm(&hyp_handle).await;
+        }
+        Ok(())
     }
 
     /// Hard-reset a VM (equivalent to pressing the physical reset button).
@@ -135,7 +227,13 @@ impl Engine {
     pub async fn reset_vm(&self, id: Uuid) -> Result<(), EngineError> {
         let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
-        vm.reset().await
+        vm.reset().await?;
+        // For QEMU: stop + start the process
+        if let Some(hyp_handle) = self.handles.get(&id) {
+            let _ = self.hypervisor.stop_vm(&hyp_handle).await;
+            let _ = self.hypervisor.start_vm(&hyp_handle).await;
+        }
+        Ok(())
     }
 
     /// Destroy a VM — stop it if running and remove from registry.
@@ -145,7 +243,11 @@ impl Engine {
         {
             let mut vm = handle.write().await;
             vm.destroy().await?;
+            if let Some(hyp_handle) = self.handles.get(&id) {
+                let _ = self.hypervisor.destroy_vm(&hyp_handle).await;
+            }
         }
+        self.handles.remove(&id);
         self.registry.remove(&id);
         tracing::info!(%id, "VM destroyed and removed from registry");
         Ok(())
@@ -155,6 +257,14 @@ impl Engine {
 impl Default for Engine {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl std::fmt::Debug for Engine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Engine")
+            .field("vm_count", &self.registry.len())
+            .finish()
     }
 }
 
@@ -216,3 +326,4 @@ mod tests {
         assert!(matches!(result, Err(EngineError::VmNotFound(_))));
     }
 }
+

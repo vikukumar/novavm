@@ -169,4 +169,7 @@ export const settingsApi = {
   getVersion: (): Promise<string> => call('get_app_version'),
 
   getHypervisorInfo: (): Promise<HypervisorInfo> => call('get_hypervisor_info'),
+
+  getQemuStatus: (): Promise<{ installed: boolean; path?: string; message?: string; install_url?: string }> =>
+    call('get_qemu_status'),
 }

@@ -4,7 +4,7 @@ import {
   Trash2, ArrowLeft, Cpu, MemoryStick,
   Activity, Terminal, Settings2,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
@@ -24,10 +24,13 @@ export function VmDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [loading, setLoading] = useState(true)
 
+  // ── Stable individual selectors — never destructure useVmStore() directly ──
   const vm = useVmStore((s) => s.vms.find((v) => v.id === id))
-  const { startVm, pauseVm, resumeVm, stopVm, resetVm, destroyVm } = useVmStore()
-  const vmMetrics = useMetricsStore((s) => (id ? s.vmMetrics[id] : null))
-  const vmHistory = useMetricsStore((s) => (id ? s.vmHistory[id] ?? [] : []))
+  const vmMetrics = useMetricsStore((s) => (id ? s.vmMetrics[id] : undefined))
+
+  // Use a ref-stable selector that returns the same empty array reference
+  const EMPTY_HISTORY = useRef<import('@/types').VmMetrics[]>([]).current
+  const vmHistory = useMetricsStore((s) => (id ? s.vmHistory[id] : undefined) ?? EMPTY_HISTORY)
 
   // Fetch VMs on mount in case we navigated here before store synced
   useEffect(() => {
@@ -36,7 +39,21 @@ export function VmDetailPage() {
       if (isMounted) setLoading(false)
     })
     return () => { isMounted = false }
-  }, [id])
+  }, []) // do NOT put id here — fetchVms loads all VMs anyway
+
+  // Stable action handlers using getState() so they never change references
+  const handleStart = useCallback(() =>
+    handleAction(() => useVmStore.getState().startVm(id!), 'Start'), [id])
+  const handlePause = useCallback(() =>
+    handleAction(() => useVmStore.getState().pauseVm(id!), 'Pause'), [id])
+  const handleResume = useCallback(() =>
+    handleAction(() => useVmStore.getState().resumeVm(id!), 'Resume'), [id])
+  const handleStop = useCallback(() =>
+    handleAction(() => useVmStore.getState().stopVm(id!), 'Stop'), [id])
+  const handleReset = useCallback(() =>
+    handleAction(() => useVmStore.getState().resetVm(id!), 'Reset'), [id])
+  const handleDestroy = useCallback(() =>
+    handleAction(async () => { await useVmStore.getState().destroyVm(id!); navigate('/vms') }, 'Destroy'), [id, navigate])
 
   if (loading && !vm) {
     return (
@@ -62,15 +79,6 @@ export function VmDetailPage() {
   }
 
   if (!vm) return null
-
-  const handleAction = async (action: () => Promise<void>, label: string) => {
-    try {
-      await action()
-      toast({ title: `${label} successful` })
-    } catch (e) {
-      toast({ title: `${label} failed`, description: String(e), variant: 'destructive' })
-    }
-  }
 
   const cpuData = vmHistory.map((m, i) => ({ t: i, cpu: m.cpu_percent }))
 
@@ -116,49 +124,21 @@ export function VmDetailPage() {
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-wrap">
             {(vm.state === 'stopped' || vm.state === 'crashed') && (
-              <ActionButton
-                label="Start"
-                icon={<Play size={14} />}
-                onClick={() => handleAction(() => startVm(vm.id), 'Start')}
-                variant="success"
-              />
+              <ActionButton label="Start" icon={<Play size={14} />} onClick={handleStart} variant="success" />
             )}
             {vm.state === 'running' && (
-              <ActionButton
-                label="Pause"
-                icon={<Pause size={14} />}
-                onClick={() => handleAction(() => pauseVm(vm.id), 'Pause')}
-              />
+              <ActionButton label="Pause" icon={<Pause size={14} />} onClick={handlePause} />
             )}
             {vm.state === 'paused' && (
-              <ActionButton
-                label="Resume"
-                icon={<Play size={14} />}
-                onClick={() => handleAction(() => resumeVm(vm.id), 'Resume')}
-                variant="success"
-              />
+              <ActionButton label="Resume" icon={<Play size={14} />} onClick={handleResume} variant="success" />
             )}
             {(vm.state === 'running' || vm.state === 'paused') && (
-              <ActionButton
-                label="Stop"
-                icon={<Square size={14} />}
-                onClick={() => handleAction(() => stopVm(vm.id), 'Stop')}
-                variant="warning"
-              />
+              <ActionButton label="Stop" icon={<Square size={14} />} onClick={handleStop} variant="warning" />
             )}
             {vm.state === 'running' && (
-              <ActionButton
-                label="Reset"
-                icon={<RotateCcw size={14} />}
-                onClick={() => handleAction(() => resetVm(vm.id), 'Reset')}
-              />
+              <ActionButton label="Reset" icon={<RotateCcw size={14} />} onClick={handleReset} />
             )}
-            <ActionButton
-              label="Destroy"
-              icon={<Trash2 size={14} />}
-              onClick={() => handleAction(async () => { await destroyVm(vm.id); navigate('/vms') }, 'Destroy')}
-              variant="danger"
-            />
+            <ActionButton label="Destroy" icon={<Trash2 size={14} />} onClick={handleDestroy} variant="danger" />
           </div>
         </div>
       </div>
@@ -251,7 +231,7 @@ export function VmDetailPage() {
       )}
 
       {activeTab === 'console' && (
-        <VmConsoleDisplay vm={vm} />
+        <VmConsoleDisplay vmId={vm.id} vmName={vm.name} vmState={vm.state} vcpus={vm.cpu_vcpus} memoryMib={vm.memory_mib} />
       )}
 
       {activeTab === 'snapshots' && (
@@ -275,6 +255,15 @@ export function VmDetailPage() {
       )}
     </div>
   )
+}
+
+async function handleAction(action: () => Promise<void>, label: string) {
+  try {
+    await action()
+    toast({ title: `${label} successful` })
+  } catch (e) {
+    toast({ title: `${label} failed`, description: String(e), variant: 'destructive' })
+  }
 }
 
 function ActionButton({

@@ -124,6 +124,7 @@ fn main() {
             commands::settings::update_settings,
             commands::settings::get_app_version,
             commands::settings::get_hypervisor_info,
+            commands::settings::get_qemu_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NovaVM application");
