@@ -45,18 +45,14 @@ fn main() {
             let state: tauri::State<AppState> = app.state();
             // Spawn background metrics collection.
             // start_background_collection takes `self: MetricsCollector` by value.
-            // MetricsCollector is Clone (backed by Arcs), so cloning is cheap.
             let metrics_owned: MetricsCollector = (*state.metrics).clone();
-            let _ = metrics_owned.start_background_collection(Duration::from_secs(1));
+            drop(metrics_owned.start_background_collection(Duration::from_secs(1)));
 
             // Initialise default NAT switch.
             if state.network.get_switch("default-nat").is_none() {
                 state
                     .network
-                    .create_switch(
-                        "default-nat".to_owned(),
-                        network::VirtualSwitchMode::Nat,
-                    )
+                    .create_switch("default-nat".to_owned(), network::VirtualSwitchMode::Nat)
                     .ok();
                 tracing::info!("Default NAT switch created");
             }

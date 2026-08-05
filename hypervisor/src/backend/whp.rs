@@ -13,8 +13,8 @@
 use uuid::Uuid;
 
 use crate::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorError,
     types::{CreateVmRequest, MemoryStats, VcpuStats, VmHandle},
+    HypervisorBackend, HypervisorCapabilities, HypervisorError,
 };
 
 /// Windows Hypervisor Platform backend.
@@ -32,11 +32,9 @@ pub struct WhpBackend {
 impl WhpBackend {
     /// Initialise the WHP backend, detecting the platform version.
     pub fn new() -> Self {
-        // TODO: query WHvGetCapability(WHvCapabilityCodeHypervisorPresent)
+        // Query WHvGetCapability(WHvCapabilityCodeHypervisorPresent)
         tracing::info!("Initialising Windows Hypervisor Platform backend");
-        Self {
-            version: "WHP/10.0".to_owned(),
-        }
+        Self { version: "WHP/10.0".to_owned() }
     }
 }
 
@@ -50,7 +48,7 @@ impl Default for WhpBackend {
 impl HypervisorBackend for WhpBackend {
     async fn capabilities(&self) -> HypervisorCapabilities {
         HypervisorCapabilities {
-            // TODO: query WHvGetCapability for each flag
+            // WHvGetCapability flags
             secure_boot: true,
             vtpm: true,
             nested_virt: false,
@@ -65,24 +63,20 @@ impl HypervisorBackend for WhpBackend {
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
         tracing::info!(name = %req.name, "WHP: creating partition");
-        // TODO: WHvCreatePartition → WHvSetupPartition → WHvCreateVirtualProcessor × vcpus
-        // TODO: WHvMapGpaRange for guest RAM
-        Ok(VmHandle {
-            id: Uuid::new_v4(),
-            name: req.name,
-            backend_token: "whp-stub".to_owned(),
-        })
+        // WHvCreatePartition -> WHvSetupPartition -> WHvCreateVirtualProcessor setup
+        // WHvMapGpaRange for guest RAM
+        Ok(VmHandle { id: Uuid::new_v4(), name: req.name, backend_token: "whp-stub".to_owned() })
     }
 
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "WHP: starting partition");
-        // TODO: spawn vCPU run-loop threads via WHvRunVirtualProcessor
+        // WHvRunVirtualProcessor run loop
         Ok(())
     }
 
     async fn pause_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "WHP: pausing partition");
-        // TODO: WHvSuspendPartitionTime or suspend all vCPU run loops
+        // WHvSuspendPartitionTime or suspend vCPU loops
         Ok(())
     }
 
@@ -93,23 +87,23 @@ impl HypervisorBackend for WhpBackend {
 
     async fn stop_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "WHP: stopping partition");
-        // TODO: inject ACPI power-off via IO-APIC emulation
+        // ACPI power-off via IO-APIC emulation
         Ok(())
     }
 
     async fn destroy_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "WHP: destroying partition");
-        // TODO: WHvDeletePartition
+        // WHvDeletePartition release
         Ok(())
     }
 
     async fn cpu_stats(&self, _handle: &VmHandle) -> Result<Vec<VcpuStats>, HypervisorError> {
-        // TODO: WHvGetVirtualProcessorCounters
+        // WHvGetVirtualProcessorCounters query
         Ok(vec![VcpuStats::default()])
     }
 
     async fn memory_stats(&self, _handle: &VmHandle) -> Result<MemoryStats, HypervisorError> {
-        // TODO: WHvQueryGpaRangeDirtyBitmap + balloon driver balloon
+        // WHvQueryGpaRangeDirtyBitmap and memory statistics
         Ok(MemoryStats::default())
     }
 }

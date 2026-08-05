@@ -39,9 +39,7 @@ pub struct NetworkManager {
 impl NetworkManager {
     /// Create a new network manager.
     pub fn new() -> Self {
-        Self {
-            switches: Arc::new(RwLock::new(HashMap::new())),
-        }
+        Self { switches: Arc::new(RwLock::new(HashMap::new())) }
     }
 
     /// Create a virtual switch.

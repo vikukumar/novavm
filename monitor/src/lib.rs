@@ -93,9 +93,7 @@ impl MetricsCollector {
 
     /// Register a VM for metric collection.
     pub fn register_vm(&self, vm_id: Uuid) {
-        self.vm_history
-            .entry(vm_id)
-            .or_insert_with(|| VecDeque::with_capacity(RING_BUFFER_SIZE));
+        self.vm_history.entry(vm_id).or_insert_with(|| VecDeque::with_capacity(RING_BUFFER_SIZE));
     }
 
     /// Deregister a VM.
@@ -133,9 +131,7 @@ impl MetricsCollector {
 
     /// Return the most recent VM metrics sample.
     pub fn latest_vm(&self, vm_id: &Uuid) -> Option<VmMetrics> {
-        self.vm_history
-            .get(vm_id)
-            .and_then(|h| h.back().cloned())
+        self.vm_history.get(vm_id).and_then(|h| h.back().cloned())
     }
 
     /// Return the full host metrics history.
@@ -145,9 +141,7 @@ impl MetricsCollector {
 
     /// Return the full VM metrics history.
     pub fn vm_history(&self, vm_id: &Uuid) -> Option<Vec<VmMetrics>> {
-        self.vm_history
-            .get(vm_id)
-            .map(|h| h.iter().cloned().collect())
+        self.vm_history.get(vm_id).map(|h| h.iter().cloned().collect())
     }
 
     /// Spawn a background tokio task that samples host metrics every `interval`.
@@ -180,16 +174,9 @@ fn collect_host_metrics() -> HostMetrics {
     let used_mib = sys.used_memory() / (1024 * 1024);
     let swap_total_mib = sys.total_swap() / (1024 * 1024);
     let swap_used_mib = sys.used_swap() / (1024 * 1024);
-    let per_cpu: Vec<f64> = sys
-        .cpus()
-        .iter()
-        .map(|c| c.cpu_usage() as f64)
-        .collect();
-    let cpu_avg = if per_cpu.is_empty() {
-        0.0
-    } else {
-        per_cpu.iter().sum::<f64>() / per_cpu.len() as f64
-    };
+    let per_cpu: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
+    let cpu_avg =
+        if per_cpu.is_empty() { 0.0 } else { per_cpu.iter().sum::<f64>() / per_cpu.len() as f64 };
 
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -236,11 +223,7 @@ mod tests {
         let collector = MetricsCollector::new();
         let vm_id = Uuid::new_v4();
         collector.register_vm(vm_id);
-        collector.record_vm_metrics(VmMetrics {
-            vm_id,
-            cpu_percent: 42.5,
-            ..Default::default()
-        });
+        collector.record_vm_metrics(VmMetrics { vm_id, cpu_percent: 42.5, ..Default::default() });
         let latest = collector.latest_vm(&vm_id).unwrap();
         assert!((latest.cpu_percent - 42.5).abs() < 0.001);
     }

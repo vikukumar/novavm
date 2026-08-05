@@ -138,7 +138,7 @@ impl NovaPlugin for MyPlugin {
             version: "1.0.0".to_owned(),
             description: "Example NovaVM plugin".to_owned(),
             author: "You".to_owned(),
-            min_novavm_version: "0.1.0".to_owned(),
+            min_novavm_version: "1.0.0".to_owned(),
         }
     }
 

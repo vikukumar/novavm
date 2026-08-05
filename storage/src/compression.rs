@@ -9,12 +9,8 @@ use crate::StorageError;
 pub const DEFAULT_COMPRESSION_LEVEL: i32 = 3;
 
 /// Compress a cluster payload using zstd.
-pub fn compress_cluster(
-    data: &[u8],
-    level: i32,
-) -> Result<Vec<u8>, StorageError> {
-    zstd::bulk::compress(data, level)
-        .map_err(|e| StorageError::Compression(e.to_string()))
+pub fn compress_cluster(data: &[u8], level: i32) -> Result<Vec<u8>, StorageError> {
+    zstd::bulk::compress(data, level).map_err(|e| StorageError::Compression(e.to_string()))
 }
 
 /// Decompress a cluster payload using zstd.

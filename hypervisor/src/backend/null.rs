@@ -5,8 +5,8 @@
 use uuid::Uuid;
 
 use crate::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorError,
     types::{CreateVmRequest, MemoryStats, VcpuStats, VmHandle},
+    HypervisorBackend, HypervisorCapabilities, HypervisorError,
 };
 
 /// A no-op hypervisor backend that satisfies the trait contract without
@@ -26,11 +26,7 @@ impl HypervisorBackend for NullBackend {
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
         tracing::debug!(name = %req.name, vcpus = req.vcpus, memory_mib = req.memory_mib, "NullBackend::create_vm");
-        Ok(VmHandle {
-            id: Uuid::new_v4(),
-            name: req.name,
-            backend_token: "null".to_owned(),
-        })
+        Ok(VmHandle { id: Uuid::new_v4(), name: req.name, backend_token: "null".to_owned() })
     }
 
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {

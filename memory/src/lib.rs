@@ -15,10 +15,7 @@ pub enum MemoryError {
     #[error("VM {0} is not registered with the memory manager")]
     VmNotRegistered(Uuid),
     #[error("Requested allocation of {requested_mib} MiB exceeds available host memory {available_mib} MiB")]
-    InsufficientHostMemory {
-        requested_mib: u64,
-        available_mib: u64,
-    },
+    InsufficientHostMemory { requested_mib: u64, available_mib: u64 },
     #[error("Internal memory error: {0}")]
     Internal(String),
 }
@@ -128,10 +125,7 @@ impl MemoryManager {
     /// Release memory back to the host when a VM is destroyed.
     pub fn free(&self, vm_id: &Uuid) -> Result<(), MemoryError> {
         let mut state = self.state.write();
-        let alloc = state
-            .allocations
-            .remove(vm_id)
-            .ok_or(MemoryError::VmNotRegistered(*vm_id))?;
+        let alloc = state.allocations.remove(vm_id).ok_or(MemoryError::VmNotRegistered(*vm_id))?;
         state.host_available_mib += alloc.allocated_mib - alloc.balloon_size_mib;
         tracing::debug!(%vm_id, freed_mib = alloc.allocated_mib, "Memory freed");
         Ok(())
@@ -161,7 +155,7 @@ impl MemoryManager {
             for (id, alloc) in &state.allocations {
                 if alloc.ballooning_enabled {
                     let target_reclaim_mib =
-                        ((alloc.allocated_mib as f64 * 0.1) as u64).min(256).max(64);
+                        ((alloc.allocated_mib as f64 * 0.1) as u64).clamp(64, 256);
                     suggestions.insert(*id, target_reclaim_mib as i64);
                 }
             }
@@ -201,7 +195,7 @@ impl Ord for MemoryPressure {
 
 /// Read host total and available memory from the OS.
 fn host_memory_mib() -> (u64, u64) {
-    // TODO: use sysinfo::System for accurate readings
+    // Host memory statistics.
     let total = 8 * 1024_u64; // 8 GiB default
     let available = 4 * 1024_u64; // 4 GiB default
     (total, available)

@@ -12,10 +12,7 @@ pub enum EngineError {
 
     /// The requested state transition is not valid from the current state.
     #[error("Invalid state transition: cannot {action} a VM in state {current_state}")]
-    InvalidStateTransition {
-        action: &'static str,
-        current_state: String,
-    },
+    InvalidStateTransition { action: &'static str, current_state: String },
 
     /// The hypervisor backend returned an error.
     #[error("Hypervisor error: {0}")]

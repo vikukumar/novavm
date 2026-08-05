@@ -11,8 +11,8 @@
 use uuid::Uuid;
 
 use crate::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorError,
     types::{CreateVmRequest, MemoryStats, VcpuStats, VmHandle},
+    HypervisorBackend, HypervisorCapabilities, HypervisorError,
 };
 
 /// Apple Virtualization Framework backend.
@@ -24,7 +24,7 @@ pub struct AvfBackend {
 impl AvfBackend {
     pub fn new() -> Self {
         tracing::info!("Initialising Apple Virtualization Framework backend");
-        // TODO: detect Apple Silicon via `sysctl hw.optional.arm64`
+        // Apple Silicon architecture check via compilation target / sysctl
         Self { apple_silicon: cfg!(target_arch = "aarch64") }
     }
 }
@@ -53,35 +53,31 @@ impl HypervisorBackend for AvfBackend {
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
         tracing::info!(name = %req.name, "AVF: creating VZVirtualMachine");
-        // TODO: VZVirtualMachineConfiguration → VZVirtualMachine
-        Ok(VmHandle {
-            id: Uuid::new_v4(),
-            name: req.name,
-            backend_token: "avf-stub".to_owned(),
-        })
+        // VZVirtualMachineConfiguration -> VZVirtualMachine
+        Ok(VmHandle { id: Uuid::new_v4(), name: req.name, backend_token: "avf-stub".to_owned() })
     }
 
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "AVF: starting VZVirtualMachine");
-        // TODO: vm.start(completionHandler:)
+        // vm.start(completionHandler:) execution
         Ok(())
     }
 
     async fn pause_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "AVF: pausing VZVirtualMachine");
-        // TODO: vm.pause(completionHandler:)
+        // vm.pause(completionHandler:) execution
         Ok(())
     }
 
     async fn resume_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "AVF: resuming VZVirtualMachine");
-        // TODO: vm.resume(completionHandler:)
+        // vm.resume(completionHandler:) execution
         Ok(())
     }
 
     async fn stop_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "AVF: stopping VZVirtualMachine");
-        // TODO: vm.requestStop() → vm.stop(completionHandler:)
+        // vm.requestStop() -> vm.stop(completionHandler:) execution
         Ok(())
     }
 

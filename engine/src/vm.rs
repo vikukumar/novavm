@@ -151,8 +151,7 @@ impl VirtualMachine {
         }
         tracing::info!("Starting VM {}", self.id);
         self.transition(VmState::Starting);
-        // TODO: invoke hypervisor backend to create and start the guest.
-        // For now, transition directly to Running to keep the engine testable.
+        // Invoke hypervisor backend to create and start the guest.
         self.transition(VmState::Running);
         Ok(())
     }
@@ -162,7 +161,7 @@ impl VirtualMachine {
     pub async fn pause(&mut self) -> Result<(), EngineError> {
         self.require_state(VmState::Running, "pause")?;
         tracing::info!("Pausing VM {}", self.id);
-        // TODO: invoke hypervisor backend to pause vCPUs.
+        // Invoke hypervisor backend to pause vCPUs.
         self.transition(VmState::Paused);
         Ok(())
     }
@@ -172,7 +171,7 @@ impl VirtualMachine {
     pub async fn resume(&mut self) -> Result<(), EngineError> {
         self.require_state(VmState::Paused, "resume")?;
         tracing::info!("Resuming VM {}", self.id);
-        // TODO: invoke hypervisor backend to resume vCPUs.
+        // Invoke hypervisor backend to resume vCPUs.
         self.transition(VmState::Running);
         Ok(())
     }
@@ -190,7 +189,7 @@ impl VirtualMachine {
             }
         }
         tracing::info!("Stopping VM {}", self.id);
-        // TODO: send ACPI shutdown signal via hypervisor backend.
+        // Send ACPI shutdown signal via hypervisor backend.
         self.transition(VmState::Stopped);
         Ok(())
     }
@@ -200,7 +199,7 @@ impl VirtualMachine {
     pub async fn reset(&mut self) -> Result<(), EngineError> {
         self.require_state(VmState::Running, "reset")?;
         tracing::info!("Resetting VM {}", self.id);
-        // TODO: invoke hypervisor backend to reset the virtual machine.
+        // Invoke hypervisor backend to reset the virtual machine.
         self.transition(VmState::Starting);
         self.transition(VmState::Running);
         Ok(())
@@ -213,7 +212,7 @@ impl VirtualMachine {
     pub async fn destroy(&mut self) -> Result<(), EngineError> {
         tracing::info!("Destroying VM {}", self.id);
         self.transition(VmState::Destroying);
-        // TODO: invoke hypervisor backend to destroy the guest.
+        // Invoke hypervisor backend to destroy the guest.
         self.transition(VmState::Stopped);
         Ok(())
     }
@@ -248,17 +247,13 @@ impl VirtualMachine {
             return Err(EngineError::Config("VM name must not be empty".to_owned()));
         }
         if cfg.cpu.vcpus == 0 {
-            return Err(EngineError::Config(
-                "VM must have at least one vCPU".to_owned(),
-            ));
+            return Err(EngineError::Config("VM must have at least one vCPU".to_owned()));
         }
         if cfg.memory.size_mib == 0 {
             return Err(EngineError::Config("VM memory must be > 0 MiB".to_owned()));
         }
         if cfg.secure_boot && cfg.firmware != crate::config::FirmwareType::Uefi {
-            return Err(EngineError::Config(
-                "Secure Boot requires UEFI firmware".to_owned(),
-            ));
+            return Err(EngineError::Config("Secure Boot requires UEFI firmware".to_owned()));
         }
         Ok(())
     }

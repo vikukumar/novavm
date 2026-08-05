@@ -4,19 +4,14 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Firmware type for a virtual machine.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FirmwareType {
     /// Legacy BIOS firmware.
     Bios,
     /// UEFI firmware (required for Secure Boot).
+    #[default]
     Uefi,
-}
-
-impl Default for FirmwareType {
-    fn default() -> Self {
-        Self::Uefi
-    }
 }
 
 /// CPU configuration.

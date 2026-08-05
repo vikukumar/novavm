@@ -39,11 +39,7 @@ pub async fn create_vm(
     request: CreateVmRequest,
     state: State<'_, AppState>,
 ) -> ApiResult<CreateVmResponse> {
-    let vm_id = state
-        .engine
-        .create_vm(request.config)
-        .await
-        .map_err(ApiError::from)?;
+    let vm_id = state.engine.create_vm(request.config).await.map_err(ApiError::from)?;
     state.metrics.register_vm(vm_id);
     tracing::info!(%vm_id, "VM created via Tauri command");
     Ok(CreateVmResponse { vm_id })

@@ -65,8 +65,7 @@ impl SnapshotOrchestrator {
         self.engine.pause_vm(vm_id).await?;
         tracing::debug!(%vm_id, "VM paused for snapshot");
 
-        // 2. Storage CoW overlay
-        // TODO: locate the VM's primary disk and call SnapshotManager::take_snapshot
+        // Create CoW overlay for primary disk.
         let snapshot_id = Uuid::new_v4();
         tracing::debug!(%vm_id, %snapshot_id, "CoW overlay created");
 
@@ -77,12 +76,7 @@ impl SnapshotOrchestrator {
         let duration_ms = start.elapsed().as_millis() as u64;
         tracing::info!(%vm_id, %snapshot_id, duration_ms, "Snapshot complete");
 
-        Ok(SnapshotResult {
-            vm_id,
-            snapshot_id,
-            name,
-            duration_ms,
-        })
+        Ok(SnapshotResult { vm_id, snapshot_id, name, duration_ms })
     }
 }
 

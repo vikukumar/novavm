@@ -80,9 +80,7 @@ impl Engine {
     /// Create and initialise a new engine instance.
     pub fn new() -> Self {
         tracing::info!("Initialising NovaVM engine");
-        Self {
-            registry: VmRegistry::new(),
-        }
+        Self { registry: VmRegistry::new() }
     }
 
     /// Expose the VM registry for external use (e.g. Tauri commands).
@@ -103,10 +101,7 @@ impl Engine {
     /// Start a VM that is currently stopped.
     #[instrument(skip(self))]
     pub async fn start_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
         vm.start().await
     }
@@ -114,10 +109,7 @@ impl Engine {
     /// Pause a running VM.
     #[instrument(skip(self))]
     pub async fn pause_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
         vm.pause().await
     }
@@ -125,10 +117,7 @@ impl Engine {
     /// Resume a paused VM.
     #[instrument(skip(self))]
     pub async fn resume_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
         vm.resume().await
     }
@@ -136,10 +125,7 @@ impl Engine {
     /// Stop (graceful shutdown) a running VM.
     #[instrument(skip(self))]
     pub async fn stop_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
         vm.stop().await
     }
@@ -147,10 +133,7 @@ impl Engine {
     /// Hard-reset a VM (equivalent to pressing the physical reset button).
     #[instrument(skip(self))]
     pub async fn reset_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         let mut vm = handle.write().await;
         vm.reset().await
     }
@@ -158,10 +141,7 @@ impl Engine {
     /// Destroy a VM — stop it if running and remove from registry.
     #[instrument(skip(self))]
     pub async fn destroy_vm(&self, id: Uuid) -> Result<(), EngineError> {
-        let handle = self
-            .registry
-            .get(&id)
-            .ok_or(EngineError::VmNotFound(id))?;
+        let handle = self.registry.get(&id).ok_or(EngineError::VmNotFound(id))?;
         {
             let mut vm = handle.write().await;
             vm.destroy().await?;
@@ -181,14 +161,26 @@ impl Default for Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CpuConfig, MemoryConfig, FirmwareType};
+    use crate::config::{CpuConfig, FirmwareType, MemoryConfig};
 
     fn test_config(name: &str) -> VmConfig {
         VmConfig {
             name: name.to_owned(),
             description: Some("Test VM".to_owned()),
-            cpu: CpuConfig { vcpus: 2, sockets: 1, cores_per_socket: 2, threads_per_core: 1, overcommit_ratio: 1.0 },
-            memory: MemoryConfig { size_mib: 512, dynamic_min_mib: 256, dynamic_max_mib: 1024, ballooning: false, huge_pages: false },
+            cpu: CpuConfig {
+                vcpus: 2,
+                sockets: 1,
+                cores_per_socket: 2,
+                threads_per_core: 1,
+                overcommit_ratio: 1.0,
+            },
+            memory: MemoryConfig {
+                size_mib: 512,
+                dynamic_min_mib: 256,
+                dynamic_max_mib: 1024,
+                ballooning: false,
+                huge_pages: false,
+            },
             firmware: FirmwareType::Bios,
             secure_boot: false,
             vtpm: false,

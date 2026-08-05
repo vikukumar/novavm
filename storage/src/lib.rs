@@ -23,10 +23,7 @@ pub enum StorageError {
     #[error("Compression error: {0}")]
     Compression(String),
     #[error("Insufficient disk space: need {needed_bytes} bytes, have {available_bytes}")]
-    InsufficientSpace {
-        needed_bytes: u64,
-        available_bytes: u64,
-    },
+    InsufficientSpace { needed_bytes: u64, available_bytes: u64 },
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Serialization error: {0}")]

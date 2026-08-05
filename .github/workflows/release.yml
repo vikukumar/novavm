@@ -4,13 +4,58 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_override:
+        description: 'Override release version (e.g. 1.0.1). Leave empty for auto-increment.'
+        required: false
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  determine-version:
+    name: Determine Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.version.outputs.release_version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate Next Version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ inputs.version_override }}" != "" ]; then
+            VER="${{ inputs.version_override }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VER="${github_ref_name#v}"
+          else
+            LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+            if [ -z "$LATEST_TAG" ]; then
+              VER="1.0.0"
+            else
+              CLEAN_TAG="${LATEST_TAG#v}"
+              MAJOR=$(echo "$CLEAN_TAG" | cut -d. -f1)
+              MINOR=$(echo "$CLEAN_TAG" | cut -d. -f2)
+              PATCH=$(echo "$CLEAN_TAG" | cut -d. -f3)
+              NEXT_PATCH=$((PATCH + 1))
+              VER="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+            fi
+          fi
+          echo "release_version=$VER" >> $GITHUB_OUTPUT
+          echo "tag_name=v$VER" >> $GITHUB_OUTPUT
+          echo "Release Version: $VER"
+          echo "Tag Name: v$VER"
+
   build-release:
     name: Build (${{ matrix.platform.os }})
+    needs: determine-version
     strategy:
       fail-fast: false
       matrix:
@@ -68,17 +113,24 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
+      - name: Generate SHA256 Checksums
+        shell: bash
+        run: |
+          cd src-tauri/target/${{ matrix.platform.target }}/release/bundle/
+          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" \) -exec sha256sum {} + > CHECKSUMS.txt || true
+          cat CHECKSUMS.txt || true
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: novavm-${{ matrix.platform.target }}-${{ github.ref_name }}
+          name: novavm-${{ matrix.platform.target }}-${{ needs.determine-version.outputs.tag_name }}
           path: |
             src-tauri/target/${{ matrix.platform.target }}/release/bundle/
 
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build-release
+    needs: [determine-version, build-release]
     permissions:
       contents: write
 
@@ -90,9 +142,20 @@ jobs:
         with:
           path: artifacts/
 
+      - name: Consolidate SHA256 Checksums
+        run: |
+          cd artifacts/
+          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" \) -exec sha256sum {} + > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          tag_name: ${{ needs.determine-version.outputs.tag_name }}
+          name: NovaVM ${{ needs.determine-version.outputs.tag_name }}
+          files: |
+            artifacts/**/*
+            artifacts/SHA256SUMS.txt
           generate_release_notes: true
-          draft: true
+          draft: false
+          prerelease: false

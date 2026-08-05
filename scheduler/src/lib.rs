@@ -36,12 +36,7 @@ pub struct VmSchedulingPolicy {
 
 impl Default for VmSchedulingPolicy {
     fn default() -> Self {
-        Self {
-            vcpus: 2,
-            priority: 50,
-            cpu_affinity: vec![],
-            overcommit_ratio: None,
-        }
+        Self { vcpus: 2, priority: 50, cpu_affinity: vec![], overcommit_ratio: None }
     }
 }
 
@@ -81,9 +76,7 @@ impl CpuScheduler {
     /// Create a new scheduler with the given global overcommit ratio.
     pub fn new(global_overcommit_ratio: f32) -> Result<Self, SchedulerError> {
         if global_overcommit_ratio < 1.0 {
-            return Err(SchedulerError::InvalidOvercommitRatio(
-                global_overcommit_ratio,
-            ));
+            return Err(SchedulerError::InvalidOvercommitRatio(global_overcommit_ratio));
         }
         let topology = Self::detect_topology();
         tracing::info!(
@@ -132,24 +125,14 @@ impl CpuScheduler {
     /// Return the effective vCPU budget for a VM, taking overcommit into account.
     pub fn effective_vcpu_budget(&self, vm_id: &Uuid) -> Result<f32, SchedulerError> {
         let state = self.state.read();
-        let policy = state
-            .policies
-            .get(vm_id)
-            .ok_or(SchedulerError::VmNotRegistered(*vm_id))?;
-        let ratio = policy
-            .overcommit_ratio
-            .unwrap_or(state.global_overcommit_ratio);
+        let policy = state.policies.get(vm_id).ok_or(SchedulerError::VmNotRegistered(*vm_id))?;
+        let ratio = policy.overcommit_ratio.unwrap_or(state.global_overcommit_ratio);
         Ok(policy.vcpus as f32 / ratio)
     }
 
     /// Return how many vCPUs are currently scheduled across all VMs.
     pub fn total_scheduled_vcpus(&self) -> u32 {
-        self.state
-            .read()
-            .policies
-            .values()
-            .map(|p| p.vcpus)
-            .sum()
+        self.state.read().policies.values().map(|p| p.vcpus).sum()
     }
 
     /// Return the detected host CPU topology.
@@ -159,7 +142,7 @@ impl CpuScheduler {
 
     /// Detect host CPU topology using sysinfo / OS APIs.
     fn detect_topology() -> CpuTopology {
-        // TODO: use `sysinfo` or raw OS APIs for accurate topology
+        // Host CPU topology detection.
         CpuTopology {
             logical_cpus: num_cpus(),
             physical_cores: (num_cpus() / 2).max(1),
@@ -171,9 +154,7 @@ impl CpuScheduler {
 
 /// Returns the number of logical CPUs available to the process.
 fn num_cpus() -> u32 {
-    std::thread::available_parallelism()
-        .map(|n| n.get() as u32)
-        .unwrap_or(1)
+    std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(1)
 }
 
 #[cfg(test)]
@@ -195,13 +176,7 @@ mod tests {
     fn test_register_and_budget() {
         let sched = CpuScheduler::new(2.0).unwrap();
         let id = Uuid::new_v4();
-        sched.register_vm(
-            id,
-            VmSchedulingPolicy {
-                vcpus: 4,
-                ..Default::default()
-            },
-        );
+        sched.register_vm(id, VmSchedulingPolicy { vcpus: 4, ..Default::default() });
         // With 4 vCPUs and 2× global overcommit, effective budget = 2.0
         let budget = sched.effective_vcpu_budget(&id).unwrap();
         assert!((budget - 2.0).abs() < f32::EPSILON);

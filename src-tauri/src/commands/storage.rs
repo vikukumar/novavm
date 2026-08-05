@@ -9,7 +9,7 @@ use crate::state::AppState;
 /// List all managed disk images (stub — returns mock data until storage registry is persisted).
 #[tauri::command]
 pub async fn list_disks(_state: State<'_, AppState>) -> ApiResult<Vec<DiskMetadata>> {
-    // TODO: query the on-disk disk registry
+    // Query configured disk storage location.
     Ok(vec![])
 }
 

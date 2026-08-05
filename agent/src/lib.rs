@@ -32,11 +32,7 @@ pub struct AgentMessage {
 impl AgentMessage {
     /// Create a new agent message with the given payload.
     pub fn new(payload: AgentPayload) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            version: AGENT_PROTOCOL_VERSION,
-            payload,
-        }
+        Self { id: Uuid::new_v4(), version: AGENT_PROTOCOL_VERSION, payload }
     }
 }
 
@@ -133,8 +129,8 @@ pub fn decode_message(frame: &[u8]) -> Result<AgentMessage, AgentError> {
     if frame.len() < 4 + len {
         return Err(AgentError::InvalidFrame("Frame truncated".to_owned()));
     }
-    let msg =
-        serde_json::from_slice(&frame[4..4 + len]).map_err(|e| AgentError::Serialization(e.to_string()))?;
+    let msg = serde_json::from_slice(&frame[4..4 + len])
+        .map_err(|e| AgentError::Serialization(e.to_string()))?;
     Ok(msg)
 }
 

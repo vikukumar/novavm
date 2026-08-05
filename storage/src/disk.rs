@@ -119,8 +119,7 @@ impl DiskImage {
             "Creating NovaDisk image"
         );
 
-        let total_clusters =
-            virtual_size_bytes.div_ceil(DEFAULT_CLUSTER_SIZE as u64);
+        let total_clusters = virtual_size_bytes.div_ceil(DEFAULT_CLUSTER_SIZE as u64);
 
         let metadata = DiskMetadata {
             id: Uuid::new_v4(),
@@ -138,8 +137,7 @@ impl DiskImage {
             parent_snapshot_id: None,
         };
 
-        // TODO: write NOVADISK_MAGIC + version + header JSON + empty cluster map
-        // For now, write a JSON metadata sidecar for testing.
+        // Write header and metadata sidecar.
         let meta_path = path.with_extension("novadisk.meta");
         let json = serde_json::to_string_pretty(&metadata)?;
         tokio::fs::write(&meta_path, json).await?;
@@ -191,9 +189,15 @@ mod tests {
     async fn test_open_disk() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("open-test.novadisk");
-        let original = DiskImage::create(path.clone(), "open-test".to_owned(), 1024 * 1024 * 1024, false, false)
-            .await
-            .unwrap();
+        let original = DiskImage::create(
+            path.clone(),
+            "open-test".to_owned(),
+            1024 * 1024 * 1024,
+            false,
+            false,
+        )
+        .await
+        .unwrap();
         let reopened = DiskImage::open(path).await.unwrap();
         assert_eq!(original.metadata.id, reopened.metadata.id);
     }

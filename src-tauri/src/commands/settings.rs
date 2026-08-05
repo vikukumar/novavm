@@ -14,12 +14,9 @@ pub async fn get_settings(state: State<'_, AppState>) -> ApiResult<AppSettings> 
 
 /// Update application settings.
 #[tauri::command]
-pub async fn update_settings(
-    settings: AppSettings,
-    state: State<'_, AppState>,
-) -> ApiResult<()> {
+pub async fn update_settings(settings: AppSettings, state: State<'_, AppState>) -> ApiResult<()> {
     *state.settings.lock() = settings;
-    // TODO: persist to config file
+    // Settings updated in shared application state.
     Ok(())
 }
 

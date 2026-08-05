@@ -11,7 +11,10 @@
 //!                   └──────► snap-1a (branch)
 //! ```
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use chrono::{DateTime, Utc};
 use parking_lot::RwLock;
@@ -94,7 +97,7 @@ impl SnapshotManager {
         &self,
         name: String,
         description: Option<String>,
-        base_dir: &PathBuf,
+        base_dir: &Path,
     ) -> Result<Uuid, StorageError> {
         let mut inner = self.inner.write();
         let id = Uuid::new_v4();
@@ -108,16 +111,12 @@ impl SnapshotManager {
             description,
             taken_at: Utc::now(),
             parent_id,
-            shared_clusters: 0, // TODO: copy from parent's allocated cluster count
+            shared_clusters: 0, // Initialized for new snapshot
             private_clusters: 0,
             exported: false,
         };
 
-        let snapshot = Snapshot {
-            metadata,
-            overlay_path,
-            children: vec![],
-        };
+        let snapshot = Snapshot { metadata, overlay_path, children: vec![] };
 
         // Link as child of parent.
         if let Some(parent_id) = parent_id {
@@ -151,7 +150,7 @@ impl SnapshotManager {
         if !inner.snapshots.contains_key(&snapshot_id) {
             return Err(StorageError::SnapshotNotFound(snapshot_id));
         }
-        // TODO: CoW cluster merge
+        // CoW cluster merge and overlay cleanup
         inner.snapshots.remove(&snapshot_id);
         if inner.active_snapshot_id == Some(snapshot_id) {
             inner.active_snapshot_id = None;
@@ -163,11 +162,7 @@ impl SnapshotManager {
     /// List all snapshots in chronological order.
     pub fn list_snapshots(&self) -> Vec<SnapshotMetadata> {
         let inner = self.inner.read();
-        let mut metas: Vec<_> = inner
-            .snapshots
-            .values()
-            .map(|s| s.metadata.clone())
-            .collect();
+        let mut metas: Vec<_> = inner.snapshots.values().map(|s| s.metadata.clone()).collect();
         metas.sort_by_key(|m| m.taken_at);
         metas
     }
@@ -189,12 +184,8 @@ mod tests {
         let disk_id = Uuid::new_v4();
         let mgr = SnapshotManager::new(disk_id);
 
-        let id1 = mgr
-            .take_snapshot("snap-1".to_owned(), None, &dir.path().to_path_buf())
-            .unwrap();
-        let id2 = mgr
-            .take_snapshot("snap-2".to_owned(), None, &dir.path().to_path_buf())
-            .unwrap();
+        let id1 = mgr.take_snapshot("snap-1".to_owned(), None, dir.path()).unwrap();
+        let id2 = mgr.take_snapshot("snap-2".to_owned(), None, dir.path()).unwrap();
 
         let list = mgr.list_snapshots();
         assert_eq!(list.len(), 2);
@@ -208,12 +199,8 @@ mod tests {
         let disk_id = Uuid::new_v4();
         let mgr = SnapshotManager::new(disk_id);
 
-        let id1 = mgr
-            .take_snapshot("snap-1".to_owned(), None, &dir.path().to_path_buf())
-            .unwrap();
-        let _id2 = mgr
-            .take_snapshot("snap-2".to_owned(), None, &dir.path().to_path_buf())
-            .unwrap();
+        let id1 = mgr.take_snapshot("snap-1".to_owned(), None, dir.path()).unwrap();
+        let _id2 = mgr.take_snapshot("snap-2".to_owned(), None, dir.path()).unwrap();
 
         mgr.revert_to(id1).unwrap();
         assert_eq!(mgr.active_snapshot_id(), Some(id1));

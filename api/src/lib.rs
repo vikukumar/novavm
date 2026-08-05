@@ -7,7 +7,7 @@
 //! providing a stable interface boundary.
 
 // Re-export engine types
-pub use engine::{Engine, VmConfig, VmRegistry, VmState, VirtualMachine};
+pub use engine::{Engine, VirtualMachine, VmConfig, VmRegistry, VmState};
 
 // Re-export hypervisor types
 pub use hypervisor::{HypervisorBackend, HypervisorCapabilities, HypervisorError};
@@ -71,10 +71,7 @@ pub struct ApiError {
 
 impl ApiError {
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            code: code.into(),
-            message: message.into(),
-        }
+        Self { code: code.into(), message: message.into() }
     }
 }
 

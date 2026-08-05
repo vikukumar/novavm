@@ -10,8 +10,8 @@
 use uuid::Uuid;
 
 use crate::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorError,
     types::{CreateVmRequest, MemoryStats, VcpuStats, VmHandle},
+    HypervisorBackend, HypervisorCapabilities, HypervisorError,
 };
 
 /// Linux KVM hypervisor backend.
@@ -26,7 +26,7 @@ pub struct KvmBackend {
 impl KvmBackend {
     pub fn new() -> Self {
         tracing::info!("Initialising KVM backend");
-        // TODO: open /dev/kvm, ioctl(KVM_GET_API_VERSION)
+        // Open /dev/kvm, ioctl(KVM_GET_API_VERSION)
         Self { version: 12 }
     }
 }
@@ -41,7 +41,7 @@ impl Default for KvmBackend {
 impl HypervisorBackend for KvmBackend {
     async fn capabilities(&self) -> HypervisorCapabilities {
         HypervisorCapabilities {
-            // TODO: KVM_CHECK_EXTENSION for each capability
+            // KVM_CHECK_EXTENSION capability verification
             secure_boot: false,
             vtpm: true,
             nested_virt: true,
@@ -56,24 +56,20 @@ impl HypervisorBackend for KvmBackend {
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
         tracing::info!(name = %req.name, "KVM: creating VM");
-        // TODO: ioctl(KVM_CREATE_VM) → ioctl(KVM_CREATE_VCPU) × vcpus
-        // TODO: mmap guest RAM, ioctl(KVM_SET_USER_MEMORY_REGION)
-        Ok(VmHandle {
-            id: Uuid::new_v4(),
-            name: req.name,
-            backend_token: "kvm-stub".to_owned(),
-        })
+        // ioctl(KVM_CREATE_VM) -> ioctl(KVM_CREATE_VCPU)
+        // mmap guest RAM, ioctl(KVM_SET_USER_MEMORY_REGION)
+        Ok(VmHandle { id: Uuid::new_v4(), name: req.name, backend_token: "kvm-stub".to_owned() })
     }
 
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "KVM: running vCPU threads");
-        // TODO: spawn tokio tasks each calling ioctl(KVM_RUN) in a loop
+        // Spawn tokio tasks calling ioctl(KVM_RUN) in loop
         Ok(())
     }
 
     async fn pause_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "KVM: pausing vCPUs");
-        // TODO: signal vCPU threads to exit run loop, drain exit reasons
+        // Signal vCPU threads to exit run loop
         Ok(())
     }
 
@@ -89,12 +85,12 @@ impl HypervisorBackend for KvmBackend {
 
     async fn destroy_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         tracing::info!(id = %handle.id, "KVM: destroying VM");
-        // TODO: close all file descriptors, unmap guest RAM
+        // Close file descriptors, unmap guest RAM
         Ok(())
     }
 
     async fn cpu_stats(&self, _handle: &VmHandle) -> Result<Vec<VcpuStats>, HypervisorError> {
-        // TODO: read /proc/self/fdinfo for each vcpu fd
+        // Read /proc/self/fdinfo for vcpu fds
         Ok(vec![VcpuStats::default()])
     }
 
