@@ -249,7 +249,7 @@ export function NetworkPage() {
                       <Edit3 size={16} />
                     </button>
                     <button
-                      onClick={() => handleDelete(sw.name)}
+                      onClick={() => setDeleteConfirmSwitch(sw.name)}
                       className="p-2.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                       title="Delete Virtual Switch"
                     >
@@ -399,6 +399,23 @@ export function NetworkPage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmSwitch)}
+        title={`Delete Switch '${deleteConfirmSwitch}'?`}
+        description="Are you sure you want to delete this virtual switch? Connected VMs will lose network connectivity on this switch."
+        confirmText="Delete Switch"
+        variant="danger"
+        onConfirm={async () => {
+          if (deleteConfirmSwitch) {
+            const name = deleteConfirmSwitch
+            setDeleteConfirmSwitch(null)
+            await handleDelete(name)
+          }
+        }}
+        onClose={() => setDeleteConfirmSwitch(null)}
+      />
 
       {/* Error Popup Modal */}
       <ErrorModal

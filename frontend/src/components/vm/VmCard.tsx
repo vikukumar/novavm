@@ -10,10 +10,12 @@ import {
   MemoryStick,
 } from 'lucide-react'
 
+import { useState } from 'react'
 import { useVmStore } from '@/stores/vmStore'
 import { cn, stateDotClass, stateColor, formatMib } from '@/lib/utils'
 import type { VmSummary } from '@/types'
 import { toast } from '@/components/ui/use-toast'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 interface VmCardProps {
   vm: VmSummary
@@ -23,6 +25,7 @@ interface VmCardProps {
 export function VmCard({ vm, compact = false }: VmCardProps) {
   const navigate = useNavigate()
   const { startVm, pauseVm, resumeVm, stopVm, destroyVm } = useVmStore()
+  const [confirmDestroy, setConfirmDestroy] = useState(false)
 
   const handleAction = async (
     action: () => Promise<void>,
@@ -142,10 +145,23 @@ export function VmCard({ vm, compact = false }: VmCardProps) {
         <ActionBtn
           icon={<Trash2 size={12} />}
           label="Destroy"
-          onClick={() => handleAction(() => destroyVm(vm.id), 'Destroy')}
+          onClick={() => setConfirmDestroy(true)}
           className="hover:bg-destructive/20 hover:text-destructive"
         />
       </div>
+
+      <ConfirmModal
+        isOpen={confirmDestroy}
+        title={`Destroy Virtual Machine '${vm.name}'?`}
+        description="Are you sure you want to permanently destroy this virtual machine? All unpersisted state and running processes will be terminated."
+        confirmText="Destroy VM"
+        variant="danger"
+        onConfirm={async () => {
+          setConfirmDestroy(false)
+          await handleAction(() => destroyVm(vm.id), 'Destroy')
+        }}
+        onClose={() => setConfirmDestroy(false)}
+      />
     </motion.div>
   )
 }

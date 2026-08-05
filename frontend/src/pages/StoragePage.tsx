@@ -7,12 +7,14 @@ import { storageApi } from '@/lib/api'
 import type { DiskMetadata } from '@/types'
 import { formatBytes, formatDateTime } from '@/lib/utils'
 import { ErrorModal } from '@/components/ui/ErrorModal'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 
 export function StoragePage() {
   const [disks, setDisks] = useState<DiskMetadata[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [errorModal, setErrorModal] = useState<{ title: string; err: unknown } | null>(null)
+  const [deleteConfirmDisk, setDeleteConfirmDisk] = useState<DiskMetadata | null>(null)
 
   // Form State
   const [name, setName] = useState('')
@@ -179,7 +181,7 @@ export function StoragePage() {
                 </p>
               </div>
               <button
-                onClick={() => handleDeleteDisk(disk.id)}
+                onClick={() => setDeleteConfirmDisk(disk)}
                 title="Delete Disk Image"
                 className="p-2.5 rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
               >
@@ -302,6 +304,23 @@ export function StoragePage() {
           </div>
         </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirmDisk)}
+        title={`Delete Disk Image '${deleteConfirmDisk?.name}'?`}
+        description="Are you sure you want to permanently delete this disk image? Any virtual machines attached to this disk image will no longer be able to boot."
+        confirmText="Delete Disk"
+        variant="danger"
+        onConfirm={async () => {
+          if (deleteConfirmDisk) {
+            const diskId = deleteConfirmDisk.id
+            setDeleteConfirmDisk(null)
+            await handleDeleteDisk(diskId)
+          }
+        }}
+        onClose={() => setDeleteConfirmDisk(null)}
+      />
 
       {/* Error Popup Modal */}
       <ErrorModal
