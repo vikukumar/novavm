@@ -45,6 +45,10 @@ pub enum DiskFormat {
     Raw,
     /// QCOW2 (import/export compatibility).
     Qcow2,
+    /// VMware VMDK image.
+    Vmdk,
+    /// Virtual Hard Disk (VHD/VHDX).
+    Vhd,
 }
 
 /// Disk metadata stored in the NovaDisk header and on the registry.
@@ -54,6 +58,8 @@ pub struct DiskMetadata {
     pub id: Uuid,
     /// Human-readable name.
     pub name: String,
+    /// File path on disk.
+    pub path: Option<PathBuf>,
     /// Virtual disk size in bytes (the size the guest sees).
     pub virtual_size_bytes: u64,
     /// Cluster size in bytes.
@@ -124,6 +130,7 @@ impl DiskImage {
         let metadata = DiskMetadata {
             id: Uuid::new_v4(),
             name,
+            path: Some(path.clone()),
             virtual_size_bytes,
             cluster_size_bytes: DEFAULT_CLUSTER_SIZE,
             allocated_clusters: 0, // thin: nothing allocated yet

@@ -111,15 +111,16 @@ export interface VmMetrics {
 
 // ─── Storage Types ───────────────────────────────────────────────────────────
 
-export type DiskFormat = 'nova_disk' | 'raw' | 'qcow2'
+export type DiskFormat = 'nova_disk' | 'raw' | 'qcow2' | 'vmdk' | 'vhd'
 
 export interface DiskMetadata {
   id: string
   name: string
+  path?: string
   virtual_size_bytes: number
-  cluster_size_bytes: number
-  allocated_clusters: number
-  total_clusters: number
+  cluster_size_bytes?: number
+  allocated_clusters?: number
+  total_clusters?: number
   format: DiskFormat
   encrypted: boolean
   compressed: boolean
@@ -149,6 +150,7 @@ export interface VirtualSwitch {
   bandwidth_limit: BandwidthLimit | null
   connected_vms: number
   ipv6_enabled: boolean
+  adapter_name?: string | null
 }
 
 // ─── Snapshot Types ──────────────────────────────────────────────────────────

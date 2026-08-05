@@ -58,6 +58,66 @@ impl NetworkManager {
         Ok(id)
     }
 
+    /// Create a virtual switch with full options.
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_switch_detailed(
+        &self,
+        name: String,
+        mode: VirtualSwitchMode,
+        subnet: ipnet::Ipv4Net,
+        gateway: std::net::Ipv4Addr,
+        dhcp_enabled: bool,
+        dhcp_range_start: std::net::Ipv4Addr,
+        dhcp_range_end: std::net::Ipv4Addr,
+        adapter_name: Option<String>,
+    ) -> Result<Uuid, NetworkError> {
+        let mut switches = self.switches.write();
+        if switches.contains_key(&name) {
+            return Err(NetworkError::SwitchAlreadyExists(name));
+        }
+        let sw = VirtualSwitch::new_detailed(
+            name.clone(),
+            mode,
+            subnet,
+            gateway,
+            dhcp_enabled,
+            dhcp_range_start,
+            dhcp_range_end,
+            adapter_name,
+        );
+        let id = sw.id;
+        switches.insert(name, sw);
+        Ok(id)
+    }
+
+    /// Update an existing virtual switch.
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_switch(
+        &self,
+        name: &str,
+        mode: VirtualSwitchMode,
+        subnet: ipnet::Ipv4Net,
+        gateway: std::net::Ipv4Addr,
+        dhcp_enabled: bool,
+        dhcp_range_start: std::net::Ipv4Addr,
+        dhcp_range_end: std::net::Ipv4Addr,
+        adapter_name: Option<String>,
+    ) -> Result<(), NetworkError> {
+        let mut switches = self.switches.write();
+        let sw = switches
+            .get_mut(name)
+            .ok_or_else(|| NetworkError::SwitchNotFound(name.to_owned()))?;
+
+        sw.mode = mode;
+        sw.subnet = subnet;
+        sw.gateway = gateway;
+        sw.dhcp_enabled = dhcp_enabled;
+        sw.dhcp_range_start = dhcp_range_start;
+        sw.dhcp_range_end = dhcp_range_end;
+        sw.adapter_name = adapter_name;
+        Ok(())
+    }
+
     /// Delete a virtual switch by name.
     pub fn delete_switch(&self, name: &str) -> Result<(), NetworkError> {
         self.switches
@@ -75,6 +135,15 @@ impl NetworkManager {
     /// Look up a switch by name.
     pub fn get_switch(&self, name: &str) -> Option<VirtualSwitch> {
         self.switches.read().get(name).cloned()
+    }
+
+    /// Enumerate physical network adapters available on the host system.
+    pub fn list_physical_adapters(&self) -> Vec<String> {
+        vec![
+            "Wi-Fi (Wireless Network Adapter)".to_owned(),
+            "Ethernet (Realtek PCIe GbE Controller)".to_owned(),
+            "Ethernet 2 (USB GbE Adapter)".to_owned(),
+        ]
     }
 }
 

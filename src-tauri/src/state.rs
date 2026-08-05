@@ -20,6 +20,8 @@ pub struct AppState {
     pub network: Arc<NetworkManager>,
     /// Application-level settings.
     pub settings: Arc<Mutex<AppSettings>>,
+    /// Disk image registry.
+    pub disks: Arc<parking_lot::RwLock<Vec<api::DiskMetadata>>>,
 }
 
 impl AppState {
@@ -31,6 +33,7 @@ impl AppState {
             metrics: Arc::new(MetricsCollector::new()),
             network: Arc::new(NetworkManager::new()),
             settings: Arc::new(Mutex::new(AppSettings::default())),
+            disks: Arc::new(parking_lot::RwLock::new(Vec::new())),
         }
     }
 }

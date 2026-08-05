@@ -84,28 +84,53 @@ export const monitorApi = {
 
 // ─── Network Commands ─────────────────────────────────────────────────────────
 
+export interface CreateSwitchParams {
+  name: string
+  mode: VirtualSwitchMode
+  subnet?: string
+  gateway?: string
+  dhcp_enabled?: boolean
+  dhcp_range_start?: string
+  dhcp_range_end?: string
+  adapter_name?: string | null
+}
+
 export const networkApi = {
   listSwitches: (): Promise<VirtualSwitch[]> => call('list_switches'),
 
-  createSwitch: (name: string, mode: VirtualSwitchMode): Promise<string> =>
-    call('create_switch', { name, mode }),
+  createSwitch: (params: CreateSwitchParams): Promise<string> =>
+    call('create_switch', params as unknown as Record<string, unknown>),
+
+  updateSwitch: (params: CreateSwitchParams): Promise<void> =>
+    call('update_switch', params as unknown as Record<string, unknown>),
 
   deleteSwitch: (name: string): Promise<void> => call('delete_switch', { name }),
+
+  listPhysicalAdapters: (): Promise<string[]> => call('list_physical_adapters'),
 }
 
 // ─── Storage Commands ─────────────────────────────────────────────────────────
 
+export interface CreateDiskParams {
+  name: string
+  path: string
+  sizeGib: number
+  thin_provisioned?: boolean
+  encrypted?: boolean
+  compressed?: boolean
+}
+
 export const storageApi = {
   listDisks: (): Promise<DiskMetadata[]> => call('list_disks'),
 
-  createDisk: (
-    name: string,
-    path: string,
-    sizeGib: number,
-    encrypted: boolean,
-    compressed: boolean,
-  ): Promise<DiskMetadata> =>
-    call('create_disk', { name, path, sizeGib, encrypted, compressed }),
+  createDisk: (params: CreateDiskParams): Promise<DiskMetadata> =>
+    call('create_disk', params as unknown as Record<string, unknown>),
+
+  importDisk: (path: string, name?: string): Promise<DiskMetadata> =>
+    call('import_disk', { path, name: name ?? null }),
+
+  deleteDisk: (id: string, deleteFile = false): Promise<void> =>
+    call('delete_disk', { id, deleteFile }),
 }
 
 // ─── Snapshot Commands ────────────────────────────────────────────────────────

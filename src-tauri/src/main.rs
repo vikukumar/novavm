@@ -41,14 +41,26 @@ fn main() {
                 metrics_owned.run_background_collection(Duration::from_secs(1)).await;
             });
 
-            // Initialise default NAT switch.
-            if state.network.get_switch("default-nat").is_none() {
+            // Initialise default VMware Workstation style virtual networks.
+            if state.network.get_switch("VMnet8 (NAT)").is_none() {
                 state
                     .network
-                    .create_switch("default-nat".to_owned(), network::VirtualSwitchMode::Nat)
+                    .create_switch("VMnet8 (NAT)".to_owned(), network::VirtualSwitchMode::Nat)
                     .ok();
-                tracing::info!("Default NAT switch created");
             }
+            if state.network.get_switch("VMnet1 (Host-Only)").is_none() {
+                state
+                    .network
+                    .create_switch("VMnet1 (Host-Only)".to_owned(), network::VirtualSwitchMode::HostOnly)
+                    .ok();
+            }
+            if state.network.get_switch("VMnet0 (Bridged)").is_none() {
+                state
+                    .network
+                    .create_switch("VMnet0 (Bridged)".to_owned(), network::VirtualSwitchMode::Bridged)
+                    .ok();
+            }
+            tracing::info!("VMware-style virtual networks initialized");
 
             tracing::info!("NovaVM application ready");
             Ok(())
@@ -74,10 +86,14 @@ fn main() {
             // Network commands
             commands::network::list_switches,
             commands::network::create_switch,
+            commands::network::update_switch,
             commands::network::delete_switch,
+            commands::network::list_physical_adapters,
             // Storage commands
             commands::storage::list_disks,
             commands::storage::create_disk,
+            commands::storage::import_disk,
+            commands::storage::delete_disk,
             // Snapshot commands
             commands::snapshot::take_snapshot,
             // Settings commands

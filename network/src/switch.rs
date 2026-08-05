@@ -67,30 +67,57 @@ pub struct VirtualSwitch {
     pub connected_vms: u32,
     /// IPv6 enabled.
     pub ipv6_enabled: bool,
+    /// Physical adapter bound for Bridged mode.
+    pub adapter_name: Option<String>,
 }
 
 impl VirtualSwitch {
     /// Create a new virtual switch with sane defaults for the chosen mode.
     pub fn new(name: String, mode: VirtualSwitchMode) -> Self {
-        // Default to 192.168.100.0/24 — callers can customise afterwards.
-        let subnet: Ipv4Net = "192.168.100.0/24".parse().unwrap();
-        let gateway: Ipv4Addr = "192.168.100.1".parse().unwrap();
-        let dhcp_start: Ipv4Addr = "192.168.100.10".parse().unwrap();
-        let dhcp_end: Ipv4Addr = "192.168.100.254".parse().unwrap();
+        let (subnet_str, gw_str, start_str, end_str) = match mode {
+            VirtualSwitchMode::Nat => ("192.168.128.0/24", "192.168.128.1", "192.168.128.128", "192.168.128.254"),
+            VirtualSwitchMode::HostOnly => ("192.168.192.0/24", "192.168.192.1", "192.168.192.128", "192.168.192.254"),
+            VirtualSwitchMode::Bridged => ("192.168.1.0/24", "192.168.1.1", "192.168.1.100", "192.168.1.200"),
+            VirtualSwitchMode::Internal => ("10.0.0.0/24", "10.0.0.1", "10.0.0.10", "10.0.0.254"),
+        };
+        Self::new_detailed(
+            name,
+            mode,
+            subnet_str.parse().unwrap(),
+            gw_str.parse().unwrap(),
+            matches!(mode, VirtualSwitchMode::Nat | VirtualSwitchMode::HostOnly),
+            start_str.parse().unwrap(),
+            end_str.parse().unwrap(),
+            None,
+        )
+    }
 
+    /// Create a virtual switch with explicit network settings.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_detailed(
+        name: String,
+        mode: VirtualSwitchMode,
+        subnet: Ipv4Net,
+        gateway: Ipv4Addr,
+        dhcp_enabled: bool,
+        dhcp_range_start: Ipv4Addr,
+        dhcp_range_end: Ipv4Addr,
+        adapter_name: Option<String>,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             name,
             mode,
             subnet,
             gateway,
-            dhcp_enabled: matches!(mode, VirtualSwitchMode::Nat | VirtualSwitchMode::HostOnly),
-            dhcp_range_start: dhcp_start,
-            dhcp_range_end: dhcp_end,
-            dns_servers: vec!["8.8.8.8".parse().unwrap(), "8.8.4.4".parse().unwrap()],
+            dhcp_enabled,
+            dhcp_range_start,
+            dhcp_range_end,
+            dns_servers: vec!["8.8.8.8".parse().unwrap(), "1.1.1.1".parse().unwrap()],
             bandwidth_limit: None,
             connected_vms: 0,
             ipv6_enabled: false,
+            adapter_name,
         }
     }
 }
