@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Play, Pause, Square, RotateCcw, Camera,
   Trash2, ArrowLeft, Cpu, MemoryStick,
-  Activity, Terminal, Settings2,
+  Activity, Terminal, Settings2, Code, Users,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -15,9 +15,10 @@ import { useMetricsStore } from '@/stores/metricsStore'
 import { cn, stateDotClass, stateColor, formatPercent, formatMib } from '@/lib/utils'
 import { toast } from '@/components/ui/use-toast'
 import { VmConsoleDisplay } from '@/components/vm/VmConsoleDisplay'
+import { VmScriptingAndUserTab } from '@/components/vm/VmScriptingAndUserTab'
 import { settingsApi, VirtualizationInfo } from '@/lib/api'
 
-type Tab = 'overview' | 'console' | 'snapshots' | 'settings'
+type Tab = 'overview' | 'console' | 'scripting' | 'snapshots' | 'settings'
 
 export function VmDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -91,6 +92,7 @@ export function VmDetailPage() {
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <Activity size={14} /> },
     { id: 'console', label: 'Console', icon: <Terminal size={14} /> },
+    { id: 'scripting', label: 'Guest Exec & Users', icon: <Code size={14} /> },
     { id: 'snapshots', label: 'Snapshots', icon: <Camera size={14} /> },
     { id: 'settings', label: 'Settings', icon: <Settings2 size={14} /> },
   ]

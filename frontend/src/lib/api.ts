@@ -82,6 +82,34 @@ export const vmApi = {
    */
   getSerialOutput: (vmId: string): Promise<string> =>
     call('get_vm_serial_output', { vmId }),
+
+  /** Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS. */
+  runScript: (
+    vmId: string,
+    scriptBody: string,
+    interpreter: string = 'powershell',
+    workingDir?: string,
+  ): Promise<{ exit_code: number; stdout: string; stderr: string; duration_ms: number }> =>
+    call('run_guest_script', { vmId, scriptBody, interpreter, workingDir: workingDir ?? null }),
+
+  /** List user accounts inside the guest VM OS. */
+  listGuestUsers: (vmId: string): Promise<Array<{ username: string; full_name: string; is_admin: boolean; is_disabled: boolean; last_login?: string }>> =>
+    call('list_guest_users', { vmId }),
+
+  /** Create a new user account inside the guest VM OS from NovaVM Portal. */
+  createGuestUser: (
+    vmId: string,
+    params: { username: string; password: string; full_name: string; is_admin: boolean }
+  ): Promise<{ username: string; full_name: string; is_admin: boolean; is_disabled: boolean }> =>
+    call('create_guest_user', { vmId, ...params }),
+
+  /** Update a guest OS user's password inside the VM. */
+  updateGuestUserPassword: (vmId: string, username: string, newPassword: string): Promise<void> =>
+    call('update_guest_user_password', { vmId, username, newPassword }),
+
+  /** Synchronize OS users between NovaVM Portal and guest VM OS. */
+  syncGuestUsers: (vmId: string): Promise<Array<{ username: string; full_name: string; is_admin: boolean; is_disabled: boolean }>> =>
+    call('sync_guest_users', { vmId }),
 }
 
 // ─── Monitor Commands ─────────────────────────────────────────────────────────
