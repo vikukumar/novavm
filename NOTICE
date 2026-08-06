@@ -1,0 +1,52 @@
+NovaVM
+======
+Native Hypervisor & Virtual Machine Manager
+
+Developer  : Vikash Kumar
+Homepage   : https://vikukumar.github.io
+Repository : https://github.com/vikukumar/novavm
+License    : MIT
+Copyright  : © 2026 Vikash Kumar. All rights reserved.
+
+Version    : 1.0.0
+Released   : 2026
+
+------------------------------------------------------------------------
+
+ABOUT NOVAVM
+------------
+NovaVM is a hardware-accelerated virtual machine manager that runs VMs
+using the operating system's own built-in hypervisor — no VirtualBox,
+no QEMU, no third-party software required.
+
+Supported backends:
+  - Windows Hypervisor Platform (WHP) — Windows 10 v1803+ / Windows 11
+  - Linux KVM (/dev/kvm)              — Any modern Linux kernel
+  - Apple Virtualization Framework    — macOS 11+
+
+------------------------------------------------------------------------
+
+THIRD-PARTY NOTICES
+-------------------
+This software uses the following open-source components:
+
+  Tauri (MIT)         — https://tauri.app
+  React (MIT)         — https://react.dev
+  Rust std library    — https://rust-lang.org (MIT / Apache-2.0)
+  windows-rs (MIT)    — https://github.com/microsoft/windows-rs
+  kvm-ioctls (MIT)    — https://github.com/rust-vmm/kvm-ioctls
+  tracing (MIT)       — https://tokio.rs
+  serde (MIT)         — https://serde.rs
+  tokio (MIT)         — https://tokio.rs
+  uuid (MIT)          — https://github.com/uuid-rs/uuid
+
+Full license texts are available in the LICENSES/ directory of the
+source repository.
+
+------------------------------------------------------------------------
+
+CONTACT
+-------
+Vikash Kumar
+  Web  : https://vikukumar.github.io
+  Code : https://github.com/vikukumar/novavm

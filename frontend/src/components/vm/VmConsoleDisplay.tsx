@@ -18,6 +18,7 @@ interface VmConsoleDisplayProps {
 
 type HypervisorStatus =
   | { kind: 'loading' }
+  | { kind: 'native'; backendName: string }  // WHP / KVM / AVF
   | { kind: 'virtualbox'; path: string }
   | { kind: 'qemu'; path: string }
   | { kind: 'none'; installUrl: string }
@@ -26,35 +27,53 @@ export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: Vm
   const [hypervisor, setHypervisor] = useState<HypervisorStatus>({ kind: 'loading' })
   const [openingDisplay, setOpeningDisplay] = useState(false)
   const [displayInfo, setDisplayInfo] = useState<string | null>(null)
+  const [serialOutput, setSerialOutput] = useState<string>('')
 
-  // Detect which hypervisor (VirtualBox / QEMU / none) is installed
+  // Detect which hypervisor is active
   useEffect(() => {
-    settingsApi.getQemuStatus()
-      .then((qemuStatus) => {
-        // Also check for VirtualBox via the hypervisor info endpoint
-        settingsApi.getHypervisorInfo()
-          .then((info) => {
-            if (info.backend_name === 'VirtualBox') {
-              setHypervisor({ kind: 'virtualbox', path: 'VBoxManage.exe' })
-            } else if (qemuStatus.installed && qemuStatus.path) {
-              setHypervisor({ kind: 'qemu', path: qemuStatus.path })
-            } else {
-              setHypervisor({
-                kind: 'none',
-                installUrl: 'https://www.virtualbox.org/wiki/Downloads',
-              })
-            }
-          })
-          .catch(() => {
-            if (qemuStatus.installed && qemuStatus.path) {
-              setHypervisor({ kind: 'qemu', path: qemuStatus.path })
-            } else {
-              setHypervisor({ kind: 'none', installUrl: 'https://www.virtualbox.org/wiki/Downloads' })
-            }
-          })
+    settingsApi.getHypervisorInfo()
+      .then((info) => {
+        const name: string = info.backend_name ?? ''
+        if (name.startsWith('NovaVM-')) {
+          // Native WHP/KVM/AVF backend — no third-party needed
+          setHypervisor({ kind: 'native', backendName: name })
+        } else if (name === 'VirtualBox') {
+          setHypervisor({ kind: 'virtualbox', path: 'VBoxManage.exe' })
+        } else {
+          settingsApi.getQemuStatus()
+            .then((q) => {
+              if (q.installed && q.path) {
+                setHypervisor({ kind: 'qemu', path: q.path })
+              } else {
+                setHypervisor({ kind: 'none', installUrl: 'https://www.virtualbox.org/wiki/Downloads' })
+              }
+            })
+            .catch(() => setHypervisor({ kind: 'none', installUrl: 'https://www.virtualbox.org/wiki/Downloads' }))
+        }
       })
       .catch(() => setHypervisor({ kind: 'none', installUrl: 'https://www.virtualbox.org/wiki/Downloads' }))
   }, [])
+
+  // Poll serial output from native backend every 500ms when VM is running
+  useEffect(() => {
+    if (hypervisor.kind !== 'native') return
+    if (vmState !== 'running') return
+
+    const poll = setInterval(async () => {
+      try {
+        const text = await vmApi.getSerialOutput(vmId)
+        if (text && text.length > 0) {
+          setSerialOutput(prev => {
+            const next = prev + text
+            // Cap at 512KB displayed
+            return next.length > 524288 ? next.slice(-524288) : next
+          })
+        }
+      } catch { /* ignore poll errors */ }
+    }, 500)
+
+    return () => clearInterval(poll)
+  }, [vmId, vmState, hypervisor.kind])
 
   const handleOpenDisplay = async () => {
     if (vmState !== 'running') {
@@ -100,14 +119,22 @@ export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: Vm
         </div>
       )}
 
+      {hypervisor.kind === 'native' && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-violet-500/8 border border-violet-500/25 rounded-xl text-xs text-violet-300">
+          <Cpu size={13} className="text-violet-400" />
+          <span className="font-semibold">{hypervisor.backendName}</span>
+          <span className="text-violet-400/60">native hardware virtualization — no third-party software needed</span>
+        </div>
+      )}
+
       {hypervisor.kind === 'none' && (
         <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div className="flex-1 text-sm">
-            <p className="font-semibold">No Hypervisor Installed</p>
+            <p className="font-semibold">Enable Windows Hypervisor Platform</p>
             <p className="text-amber-400/80 mt-0.5">
-              Install <strong>VirtualBox</strong> to run real virtual machines with a full graphical display.
-              QEMU is also supported as an alternative.
+              Run in PowerShell (Admin): <code className="bg-black/40 px-1 rounded text-amber-200">Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform</code>
+              — then restart. NovaVM will use the built-in hypervisor automatically.
             </p>
           </div>
           <a
@@ -135,6 +162,28 @@ export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: Vm
           <span className="font-semibold">QEMU</span>
           <span className="text-emerald-400/60">{hypervisor.path}</span>
           <span className="text-emerald-400/40">— SDL window + VNC :5900</span>
+        </div>
+      )}
+
+      {/* ── Native Serial Console (shown when native backend is active & running) ── */}
+      {hypervisor.kind === 'native' && vmState === 'running' && (
+        <div className="rounded-2xl border border-violet-500/20 bg-[#080808] overflow-hidden shadow-2xl">
+          <div className="flex items-center justify-between px-4 py-2 bg-[#101010] border-b border-border/40 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="font-semibold text-foreground">Serial Console — COM1</span>
+            </div>
+            <span className="text-[10px] text-muted-foreground/50">real guest output via UART</span>
+          </div>
+          <div
+            className="p-4 h-72 overflow-y-auto font-mono text-xs leading-relaxed text-emerald-300/90 whitespace-pre-wrap"
+            style={{ scrollbarWidth: 'thin', scrollbarColor: '#333 transparent' }}
+          >
+            {serialOutput.length === 0
+              ? <span className="text-muted-foreground/40 italic">Waiting for guest output…</span>
+              : serialOutput
+            }
+          </div>
         </div>
       )}
 
@@ -176,7 +225,8 @@ export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: Vm
                   <p className="text-base font-semibold text-foreground/80">Virtual Machine is Powered Off</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     Start the VM to open a real{' '}
-                    {hypervisor.kind === 'virtualbox' ? 'VirtualBox' : 'QEMU'} display window
+                    {hypervisor.kind === 'native' ? hypervisor.backendName :
+                     hypervisor.kind === 'virtualbox' ? 'VirtualBox' : 'QEMU'} display window
                   </p>
                 </div>
               </div>

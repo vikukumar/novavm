@@ -11,5 +11,7 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"
-  }
+  },
+  "author": "Vikash Kumar",
+  "homepage": "https://vikukumar.github.io"
 }

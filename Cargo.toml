@@ -18,9 +18,11 @@ resolver = "2"
 [workspace.package]
 version = "1.0.0"
 edition = "2021"
-authors = ["NovaVM Contributors"]
-license = "Apache-2.0"
+authors = ["Vikash Kumar <vikukumar@users.noreply.github.com>"]
+license = "MIT"
+homepage = "https://vikukumar.github.io"
 repository = "https://github.com/vikukumar/novavm"
+description = "NovaVM — Native hardware virtualization platform by Vikash Kumar"
 rust-version = "1.78"
 
 [workspace.dependencies]

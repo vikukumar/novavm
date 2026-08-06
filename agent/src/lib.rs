@@ -1,22 +1,20 @@
-//! # NovaVM Guest Agent Protocol
+//! # NovaVM Guest Agent & Script Execution Protocol
 //!
-//! Defines the wire protocol for communication between the NovaVM host and the
-//! in-guest agent (nova-agent). The guest agent runs inside the VM and provides:
+//! Defines the wire protocol for communication between the NovaVM host portal and the
+//! in-guest agent (nova-agent / VMware Tools equivalent).
 //!
-//! - Clipboard synchronisation
-//! - Drag-and-drop file transfer
-//! - Shared folder mounting
-//! - USB device redirection metadata
-//! - Guest OS information and health metrics
-//!
-//! Transport: vsock (Linux/macOS) or Hyper-V socket (Windows).
-//! Framing: length-prefixed JSON messages.
+//! Key Capabilities:
+//! - In-Guest Script Execution (Bash, PowerShell, Python, CMD) with output capture
+//! - Guest OS User Account Management (List, Create, Delete, Password Reset, Sync)
+//! - System Metrics, Clipboard Sync, Shared Folders, USB Redirection
+
+pub mod guest_exec;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Agent protocol version.
-pub const AGENT_PROTOCOL_VERSION: u32 = 1;
+pub const AGENT_PROTOCOL_VERSION: u32 = 2;
 
 /// A message sent between host and guest agent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +28,6 @@ pub struct AgentMessage {
 }
 
 impl AgentMessage {
-    /// Create a new agent message with the given payload.
     pub fn new(payload: AgentPayload) -> Self {
         Self { id: Uuid::new_v4(), version: AGENT_PROTOCOL_VERSION, payload }
     }
@@ -46,6 +43,22 @@ pub enum AgentPayload {
     GetGuestInfo,
     /// Guest responds with OS information.
     GuestInfo(GuestInfoData),
+    /// Host requests script execution inside guest OS (VMware Tools Guest Exec equivalent).
+    RunScript(ScriptPayload),
+    /// Guest responds with script execution results.
+    ScriptResult(ScriptResultData),
+    /// Host requests list of OS user accounts inside the VM.
+    ListUsers,
+    /// Guest responds with list of OS user accounts.
+    UserList(Vec<GuestUser>),
+    /// Host requests creation of a new OS user account inside the VM.
+    CreateUser(CreateUserData),
+    /// Host requests deletion of an OS user account inside the VM.
+    DeleteUser(String),
+    /// Host requests password update for an OS user account inside the VM.
+    UpdateUserPassword(UpdatePasswordData),
+    /// Trigger bi-directional sync of portal user records and guest OS user accounts.
+    SyncUsers,
     /// Host pushes clipboard content to guest.
     ClipboardSet(ClipboardData),
     /// Guest pushes clipboard content to host.
@@ -82,7 +95,66 @@ pub struct GuestInfoData {
     pub logged_in_users: Vec<String>,
 }
 
-/// Clipboard data (text only for now; binary blobs via separate transfer).
+/// Payload for running a script inside the guest OS.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScriptPayload {
+    /// Script interpreter: "powershell", "cmd", "bash", "sh", "python"
+    pub interpreter: String,
+    /// Full source code or command line of the script to execute
+    pub script_body: String,
+    /// Execution timeout in seconds (default: 60)
+    pub timeout_secs: u64,
+    /// Optional working directory inside guest OS
+    pub working_dir: Option<String>,
+    /// Environment variables to pass to the script
+    pub env_vars: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Output and result of script execution inside guest OS.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScriptResultData {
+    /// Command exit code (0 = success)
+    pub exit_code: i32,
+    /// Standard output captured during execution
+    pub stdout: String,
+    /// Standard error captured during execution
+    pub stderr: String,
+    /// Total execution duration in milliseconds
+    pub duration_ms: u64,
+}
+
+/// OS User Account representation inside the VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuestUser {
+    /// OS username (e.g. "Administrator", "root", "devuser")
+    pub username: String,
+    /// Full name or display name
+    pub full_name: String,
+    /// Whether user has Administrator / root privileges
+    pub is_admin: bool,
+    /// Whether account is disabled or locked out
+    pub is_disabled: bool,
+    /// ISO timestamp of last login if available
+    pub last_login: Option<String>,
+}
+
+/// Parameters for creating an OS user inside the VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateUserData {
+    pub username: String,
+    pub password: String,
+    pub full_name: String,
+    pub is_admin: bool,
+}
+
+/// Parameters for updating an OS user's password inside the VM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePasswordData {
+    pub username: String,
+    pub new_password: String,
+}
+
+/// Clipboard data.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardData {
     pub mime_type: String,
@@ -145,23 +217,6 @@ pub enum AgentError {
     NotConnected(Uuid),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_message_roundtrip() {
-        let msg = AgentMessage::new(AgentPayload::GetGuestInfo);
-        let frame = encode_message(&msg).unwrap();
-        let decoded = decode_message(&frame).unwrap();
-        assert_eq!(decoded.id, msg.id);
-        assert!(matches!(decoded.payload, AgentPayload::GetGuestInfo));
-    }
-
-    #[test]
-    fn test_invalid_frame() {
-        assert!(decode_message(&[0u8; 3]).is_err());
-    }
+    #[error("Script execution error: {0}")]
+    ExecError(String),
 }

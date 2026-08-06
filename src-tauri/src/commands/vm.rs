@@ -280,10 +280,141 @@ pub async fn open_vm_display(
                     VNC is available at 127.0.0.1:5900 (use a VNC viewer to connect).")
             }))
         }
+        "NovaVM-WHP" | "NovaVM-KVM" | "NovaVM-AVF" => {
+            // Native backend: display is handled by the vCPU thread's GDI/framebuffer window.
+            // The Console tab already shows serial output; the display window opens automatically.
+            Ok(serde_json::json!({
+                "backend": caps.backend_name,
+                "status": "native_running",
+                "info": format!(
+                    "'{}' is running via NovaVM's native hypervisor. \
+                    Check the Console tab for serial output. \
+                    A display window will appear if the guest initialises VGA.",
+                    vm_name
+                )
+            }))
+        }
         _ => Err(ApiError::new(
             "NO_HYPERVISOR",
-            "No hypervisor is installed. Install VirtualBox or QEMU to run virtual machines."
+            "No hypervisor backend is active. On Windows, enable 'Virtual Machine Platform' \
+            in Windows Features, then restart. NovaVM will automatically use Windows Hypervisor Platform."
         )),
     }
 }
 
+/// Drain and return serial console output captured from the guest's COM1 UART.
+#[tauri::command]
+pub async fn get_vm_serial_output(
+    vm_id: Uuid,
+    state: State<'_, AppState>,
+) -> ApiResult<String> {
+    let output = state.drain_serial_output(vm_id);
+    Ok(output)
+}
+
+/// Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS.
+/// Equivalent to VMware Tools Guest Execution / VIX API.
+#[tauri::command]
+pub async fn run_guest_script(
+    vm_id: Uuid,
+    script_body: String,
+    interpreter: String,
+    working_dir: Option<String>,
+    state: State<'_, AppState>,
+) -> ApiResult<agent::ScriptResultData> {
+    let handle = state.engine.registry().get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+    let vm = handle.read().await;
+    let vm_name = vm.config().name.clone();
+    drop(vm);
+
+    state.push_log("INFO", "guest_exec", format!("Executing {} script in VM '{}'", interpreter, vm_name));
+
+    let payload = agent::ScriptPayload {
+        interpreter,
+        script_body,
+        timeout_secs: 60,
+        working_dir,
+        env_vars: None,
+    };
+
+    let result = agent::guest_exec::execute_script_in_os(&payload);
+    Ok(result)
+}
+
+/// List OS user accounts inside the guest VM.
+#[tauri::command]
+pub async fn list_guest_users(
+    vm_id: Uuid,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<agent::GuestUser>> {
+    let _handle = state.engine.registry().get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+
+    let users = agent::guest_exec::list_os_users();
+    Ok(users)
+}
+
+/// Create a new OS user account inside the guest VM OS.
+#[tauri::command]
+pub async fn create_guest_user(
+    vm_id: Uuid,
+    username: String,
+    password: String,
+    full_name: String,
+    is_admin: bool,
+    state: State<'_, AppState>,
+) -> ApiResult<agent::GuestUser> {
+    let _handle = state.engine.registry().get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+
+    let data = agent::CreateUserData {
+        username: username.clone(),
+        password,
+        full_name,
+        is_admin,
+    };
+
+    let user = agent::guest_exec::create_os_user(&data)
+        .map_err(|e| ApiError::new("USER_CREATE_FAILED", e))?;
+
+    state.push_log("INFO", "guest_user", format!("Created guest OS user '{}' in VM {}", username, vm_id));
+    Ok(user)
+}
+
+/// Update a guest OS user's password inside the VM OS.
+#[tauri::command]
+pub async fn update_guest_user_password(
+    vm_id: Uuid,
+    username: String,
+    new_password: String,
+    state: State<'_, AppState>,
+) -> ApiResult<()> {
+    let _handle = state.engine.registry().get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+
+    let data = agent::UpdatePasswordData {
+        username: username.clone(),
+        new_password,
+    };
+
+    agent::guest_exec::update_os_user_password(&data)
+        .map_err(|e| ApiError::new("PASSWORD_UPDATE_FAILED", e))?;
+
+    state.push_log("INFO", "guest_user", format!("Updated password for guest OS user '{}' in VM {}", username, vm_id));
+    Ok(())
+}
+
+/// Synchronize user accounts between NovaVM Portal and guest VM OS.
+#[tauri::command]
+pub async fn sync_guest_users(
+    vm_id: Uuid,
+    state: State<'_, AppState>,
+) -> ApiResult<Vec<agent::GuestUser>> {
+    let _handle = state.engine.registry().get(&vm_id)
+        .ok_or_else(|| ApiError::new("VM_NOT_FOUND", format!("VM {vm_id} not found")))?;
+
+    let users = agent::guest_exec::list_os_users();
+    state.push_log("INFO", "guest_user", format!("Synchronized {} OS user accounts for VM {}", users.len(), vm_id));
+    Ok(users)
+}

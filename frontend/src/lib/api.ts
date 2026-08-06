@@ -71,9 +71,17 @@ export const vmApi = {
   /** Open (or bring to front) the VM's graphical display window.
    *  For VirtualBox: opens the native VirtualBox GUI window.
    *  For QEMU: returns VNC info (SDL window was already opened at start).
+   *  For native WHP/KVM: returns status info (display handled by vCPU thread).
    */
   openDisplay: (vmId: string): Promise<{ backend: string; status: string; info: string }> =>
     call('open_vm_display', { vmId }),
+
+  /** Drain real serial console output captured from the guest's COM1 UART.
+   *  Returns new text written by the guest since the last call.
+   *  Only populated when using the native NovaVM-WHP or NovaVM-KVM backend.
+   */
+  getSerialOutput: (vmId: string): Promise<string> =>
+    call('get_vm_serial_output', { vmId }),
 }
 
 // ─── Monitor Commands ─────────────────────────────────────────────────────────

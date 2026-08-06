@@ -100,6 +100,12 @@ fn main() {
             commands::vm::destroy_vm,
             commands::vm::update_vm_config,
             commands::vm::open_vm_display,
+            commands::vm::get_vm_serial_output,
+            commands::vm::run_guest_script,
+            commands::vm::list_guest_users,
+            commands::vm::create_guest_user,
+            commands::vm::update_guest_user_password,
+            commands::vm::sync_guest_users,
             // Monitor commands
             commands::monitor::get_host_metrics,
             commands::monitor::get_vm_metrics,

@@ -2,9 +2,11 @@
 //!
 //! Holds all shared state across Tauri command handlers.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use uuid::Uuid;
 
 use engine::Engine;
 use monitor::MetricsCollector;
@@ -24,6 +26,9 @@ pub struct AppState {
     pub disks: Arc<parking_lot::RwLock<Vec<api::DiskMetadata>>>,
     /// Real-time application log stream.
     pub logs: Arc<parking_lot::RwLock<Vec<api::LogEntry>>>,
+    /// Per-VM serial console output (UART bytes captured by native backends).
+    /// Keyed by VM UUID; value is a String that accumulates UART TX output.
+    pub serial_buffers: Arc<Mutex<HashMap<Uuid, String>>>,
 }
 
 impl AppState {
@@ -64,6 +69,7 @@ impl AppState {
             settings: Arc::new(Mutex::new(AppSettings::default())),
             disks: Arc::new(parking_lot::RwLock::new(Vec::new())),
             logs: Arc::new(parking_lot::RwLock::new(initial_logs)),
+            serial_buffers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -80,6 +86,27 @@ impl AppState {
         if logs.len() > 1000 {
             logs.remove(0);
         }
+    }
+
+    /// Append serial output to a VM's buffer (called by vCPU threads).
+    #[allow(dead_code)]
+    pub fn push_serial_output(&self, vm_id: Uuid, data: &[u8]) {
+        if let Ok(text) = std::str::from_utf8(data) {
+            let mut bufs = self.serial_buffers.lock();
+            let buf = bufs.entry(vm_id).or_default();
+            buf.push_str(text);
+            // Cap per-VM serial buffer at 1 MB
+            if buf.len() > 1_048_576 {
+                let trim = buf.len() - 1_048_576;
+                buf.drain(..trim);
+            }
+        }
+    }
+
+    /// Drain and return all buffered serial output for a VM, clearing the buffer.
+    pub fn drain_serial_output(&self, vm_id: Uuid) -> String {
+        let mut bufs = self.serial_buffers.lock();
+        bufs.remove(&vm_id).unwrap_or_default()
     }
 
     /// Persist all registered VMs to disk JSON storage.

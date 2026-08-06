@@ -12,6 +12,7 @@
 //! A [`NullBackend`] is always available for testing and CI on any OS.
 
 pub mod backend;
+pub mod device;
 pub mod nova_engine;
 pub mod types;
 
@@ -101,34 +102,57 @@ pub trait HypervisorBackend: Send + Sync + std::fmt::Debug {
     async fn memory_stats(&self, handle: &VmHandle) -> Result<MemoryStats, HypervisorError>;
 }
 
-/// Detect the appropriate hypervisor backend for the current platform and return it.
+/// Detect the best available hypervisor backend.
 ///
-/// Priority order:
-/// 1. **VirtualBox** — if `VBoxManage.exe` is found. Opens a full GUI display window
-///    when VMs are started. Supports Windows, Linux, and macOS guests.
-/// 2. **QEMU** — if `qemu-system-x86_64` is found. Launches real VMs with an SDL
-///    display window and VNC server. Cross-platform.
-/// 3. **NullBackend** — no-op fallback. VMs will not actually run.
+/// Priority order — **native OS-level APIs first**, no third-party software needed:
+///
+/// 1. **WHP** (Windows) — Windows Hypervisor Platform. Same engine as Hyper-V.
+///    Requires the "Virtual Machine Platform" optional Windows feature.
+/// 2. **KVM** (Linux) — Kernel Virtual Machine. Built into the Linux kernel.
+///    Available when `/dev/kvm` exists and is accessible.
+/// 3. **AVF** (macOS) — Apple Virtualization Framework. Built into macOS 11+.
+/// 4. **VirtualBox** — fallback if installed and VBoxManage.exe is found.
+/// 5. **QEMU** — fallback if installed and qemu-system-x86_64 is found.
+/// 6. **NullBackend** — no-op. Tells the user which feature to enable.
 pub fn detect_backend() -> Arc<dyn HypervisorBackend> {
-    // 1. Try VirtualBox — preferred on Windows for its full GUI display
-    if let Some(vbox) = backend::VBoxBackend::detect() {
-        tracing::info!("VirtualBox backend selected — real VM execution with GUI display enabled");
-        return Arc::new(vbox);
+    // ── 1. Native OS hypervisor APIs ─────────────────────────────────────────
+    #[cfg(target_os = "windows")]
+    if let Some(whp) = backend::WhpBackend::detect() {
+        tracing::info!("NovaVM-WHP backend: using Windows Hypervisor Platform (no third-party needed)");
+        return Arc::new(whp);
     }
 
-    // 2. Try QEMU — cross-platform, real VMs via SDL window + VNC
+    #[cfg(target_os = "linux")]
+    if let Some(kvm) = backend::KvmBackend::detect() {
+        tracing::info!("NovaVM-KVM backend: using Linux KVM (no third-party needed)");
+        return Arc::new(kvm);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        tracing::info!("NovaVM-AVF backend: using Apple Virtualization Framework");
+        return Arc::new(backend::AvfBackend::new());
+    }
+
+    // ── 2. Third-party hypervisors (optional, if installed) ──────────────────
+    if let Some(vbox) = backend::VBoxBackend::detect() {
+        tracing::info!("VirtualBox fallback backend selected");
+        return Arc::new(vbox);
+    }
     if let Some(qemu) = backend::QemuBackend::detect() {
-        tracing::info!("QEMU backend selected — real VM execution enabled");
+        tracing::info!("QEMU fallback backend selected");
         return Arc::new(qemu);
     }
 
-    // 3. Neither found — warn and fall back to no-op backend
+    // ── 3. Nothing found — give actionable instructions ──────────────────────
+    #[cfg(target_os = "windows")]
     tracing::warn!(
-        "Neither VirtualBox nor QEMU found on this system. \
-        Virtual machines will NOT actually run. \
-        Install VirtualBox from https://www.virtualbox.org/wiki/Downloads \
-        or QEMU from https://www.qemu.org/download/"
+        "Windows Hypervisor Platform not available. \
+        Enable it with: Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform"
     );
+    #[cfg(target_os = "linux")]
+    tracing::warn!("KVM not available. Is /dev/kvm readable? Try: sudo chmod 666 /dev/kvm");
+
     Arc::new(backend::NullBackend)
 }
 
