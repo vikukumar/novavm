@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Play, Pause, Square, RotateCcw, Monitor,
-  Maximize2, ExternalLink, AlertTriangle, Box, Cpu,
+  Maximize2, AlertTriangle, Cpu,
 } from 'lucide-react'
 import { useVmStore } from '@/stores/vmStore'
 import { settingsApi, vmApi } from '@/lib/api'
