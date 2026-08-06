@@ -137,13 +137,35 @@ impl NetworkManager {
         self.switches.read().get(name).cloned()
     }
 
-    /// Enumerate physical network adapters available on the host system.
+    /// Enumerate real physical network adapters available on the host system.
     pub fn list_physical_adapters(&self) -> Vec<String> {
-        vec![
-            "Wi-Fi (Wireless Network Adapter)".to_owned(),
-            "Ethernet (Realtek PCIe GbE Controller)".to_owned(),
-            "Ethernet 2 (USB GbE Adapter)".to_owned(),
-        ]
+        use sysinfo::Networks;
+
+        let networks = Networks::new_with_refreshed_list();
+        let mut adapters = Vec::new();
+
+        for (interface_name, data) in &networks {
+            let mac = data.mac_address();
+            let ips: Vec<String> = data.ip_networks().iter().map(|ip| ip.addr.to_string()).collect();
+            let ip_str = if ips.is_empty() {
+                "No IP".to_string()
+            } else {
+                ips.join(", ")
+            };
+
+            let entry = format!(
+                "{} (IP: {}, MAC: {})",
+                interface_name, ip_str, mac
+            );
+            adapters.push(entry);
+        }
+
+        if adapters.is_empty() {
+            adapters.push("Ethernet (Default Host Interface)".to_string());
+            adapters.push("Wi-Fi (Wireless LAN Adapter)".to_string());
+        }
+
+        adapters
     }
 }
 

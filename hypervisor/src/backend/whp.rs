@@ -64,7 +64,7 @@ use windows::Win32::{
 
 // ─── WHP property codes (raw u32, matches WinHvPlatform.h) ────────────────────
 const WHV_PROP_CPU_COUNT: WHV_PARTITION_PROPERTY_CODE =
-    WHV_PARTITION_PROPERTY_CODE(0x0000_0011);
+    WHV_PARTITION_PROPERTY_CODE(0x0000_1000);
 #[allow(dead_code)]
 const WHV_PROP_EXTENDED_VM_EXITS: WHV_PARTITION_PROPERTY_CODE =
     WHV_PARTITION_PROPERTY_CODE(0x0000_0001);

@@ -131,37 +131,12 @@ export function VmConsoleDisplay({ vmId, vmName, vmState, vcpus, memoryMib }: Vm
         <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300">
           <AlertTriangle size={18} className="mt-0.5 flex-shrink-0" />
           <div className="flex-1 text-sm">
-            <p className="font-semibold">Enable Windows Hypervisor Platform</p>
+            <p className="font-semibold">Enable Hardware Virtualization Platform</p>
             <p className="text-amber-400/80 mt-0.5">
               Run in PowerShell (Admin): <code className="bg-black/40 px-1 rounded text-amber-200">Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform</code>
-              — then restart. NovaVM will use the built-in hypervisor automatically.
+              — then restart to activate NovaVM's native hardware hypervisor.
             </p>
           </div>
-          <a
-            href={hypervisor.installUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-100 whitespace-nowrap border border-amber-500/40 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            Install VirtualBox <ExternalLink size={11} />
-          </a>
-        </div>
-      )}
-
-      {hypervisor.kind === 'virtualbox' && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-blue-500/8 border border-blue-500/25 rounded-xl text-xs text-blue-300">
-          <Box size={13} className="text-blue-400" />
-          <span className="font-semibold">VirtualBox</span>
-          <span className="text-blue-400/60">active backend — full GUI display supported</span>
-        </div>
-      )}
-
-      {hypervisor.kind === 'qemu' && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/8 border border-emerald-500/25 rounded-xl text-xs text-emerald-300">
-          <Cpu size={13} className="text-emerald-400" />
-          <span className="font-semibold">QEMU</span>
-          <span className="text-emerald-400/60">{hypervisor.path}</span>
-          <span className="text-emerald-400/40">— SDL window + VNC :5900</span>
         </div>
       )}
 
