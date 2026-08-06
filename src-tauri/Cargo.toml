@@ -42,6 +42,7 @@ dirs-next = "2"
 async-trait = "0.1"
 ipnet = "2.9"
 
+agent = { workspace = true }
 api = { workspace = true }
 engine = { workspace = true }
 monitor = { workspace = true }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-  Code, Users, Play, RefreshCw, Plus, UserPlus, Key, ShieldCheck,
-  CheckCircle2, XCircle, Clock, Terminal, AlertCircle, Lock,
+  Code, Users, Play, RefreshCw, UserPlus, Key, ShieldCheck,
+  CheckCircle2, XCircle, Clock, Terminal, Lock,
 } from 'lucide-react'
 import { vmApi } from '@/lib/api'
 import { toast } from '@/components/ui/use-toast'

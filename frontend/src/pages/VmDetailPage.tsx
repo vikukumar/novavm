@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   Play, Pause, Square, RotateCcw, Camera,
   Trash2, ArrowLeft, Cpu, MemoryStick,
-  Activity, Terminal, Settings2, Code, Users,
+  Activity, Terminal, Settings2, Code,
 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -268,6 +268,10 @@ export function VmDetailPage() {
 
       {activeTab === 'console' && (
         <VmConsoleDisplay vmId={vm.id} vmName={vm.name} vmState={vm.state} vcpus={vm.cpu_vcpus} memoryMib={vm.memory_mib} />
+      )}
+
+      {activeTab === 'scripting' && (
+        <VmScriptingAndUserTab vmId={vm.id} vmName={vm.name} vmState={vm.state} />
       )}
 
       {activeTab === 'snapshots' && (

@@ -269,7 +269,7 @@ fn create_os_user_posix(data: &CreateUserData) -> Result<GuestUser, String> {
 
 fn update_os_user_password_posix(data: &UpdatePasswordData) -> Result<(), String> {
     let chpass = format!("{}:{}", data.username, data.new_password);
-    let mut child = Command::new("chpasswd").stdin(Stdio::piped()).spawn();
+    let child = Command::new("chpasswd").stdin(Stdio::piped()).spawn();
     if let Ok(mut c) = child {
         use std::io::Write;
         if let Some(ref mut stdin) = c.stdin {
