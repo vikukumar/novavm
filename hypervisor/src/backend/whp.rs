@@ -52,9 +52,10 @@ use windows::Win32::{
         Hypervisor::{
             WHvCancelRunVirtualProcessor, WHvCreatePartition, WHvCreateVirtualProcessor,
             WHvDeletePartition, WHvGetVirtualProcessorRegisters,
-            WHvMapGpaRange, WHvRunVirtualProcessor, WHvSetPartitionProperty,
+            WHvMapGpaRange, WHvPartitionPropertyCodeProcessorCount,
+            WHvRunVirtualProcessor, WHvSetPartitionProperty,
             WHvSetVirtualProcessorRegisters, WHvSetupPartition,
-            WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY,
+            WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE,
             WHV_PARTITION_PROPERTY_CODE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE,
             WHV_RUN_VP_EXIT_CONTEXT, WHV_RUN_VP_EXIT_REASON,
         },
@@ -62,9 +63,9 @@ use windows::Win32::{
     },
 };
 
-// ─── WHP property codes (raw u32, matches WinHvPlatform.h) ────────────────────
-const WHV_PROP_CPU_COUNT: WHV_PARTITION_PROPERTY_CODE =
-    WHV_PARTITION_PROPERTY_CODE(0x0000_1000);
+// ─── WHP property codes ────────────────────────────────────────────────────────
+// WHvPartitionPropertyCodeProcessorCount is imported directly from the windows
+// crate (value = 0x1FFF / 8191), which matches WinHvPlatformDefs.h exactly.
 #[allow(dead_code)]
 const WHV_PROP_EXTENDED_VM_EXITS: WHV_PARTITION_PROPERTY_CODE =
     WHV_PARTITION_PROPERTY_CODE(0x0000_0001);
@@ -368,15 +369,17 @@ impl HypervisorBackend for WhpBackend {
         let partition = unsafe { WHvCreatePartition() }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvCreatePartition: {e}")))?;
 
-        // ── 2. Set vCPU count ──────────────────────────────────────────────────
-        let mut cpu_prop = WHV_PARTITION_PROPERTY::default();
-        cpu_prop.ProcessorCount = vcpu_count;
+        // ── 2. Set vCPU count ─────────────────────────────────────────────────
+        // WHvPartitionPropertyCodeProcessorCount requires a plain UINT32 buffer
+        // (4 bytes), NOT the full WHV_PARTITION_PROPERTY union. Passing the
+        // wrong size causes error 0x80370302 (property does not exist).
+        let cpu_count_val: u32 = vcpu_count;
         unsafe {
             WHvSetPartitionProperty(
                 partition,
-                WHV_PROP_CPU_COUNT,
-                &cpu_prop as *const _ as *const c_void,
-                std::mem::size_of::<WHV_PARTITION_PROPERTY>() as u32,
+                WHvPartitionPropertyCodeProcessorCount,
+                &cpu_count_val as *const u32 as *const c_void,
+                std::mem::size_of::<u32>() as u32,
             )
         }
         .map_err(|e| HypervisorError::CreateFailed(format!("WHvSetPartitionProperty(cpu): {e}")))?;
