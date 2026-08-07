@@ -33,7 +33,7 @@ pub use monitor::{HostMetrics, MetricsCollector, VmMetrics};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-// ─── Request / Response DTOs ─────────────────────────────────────────────────
+// --- Request / Response DTOs -------------------------------------------------
 
 /// Real-time application log entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ impl From<snapshot::SnapshotError> for ApiError {
     }
 }
 
-/// Helper — convert `Result<T, E>` to `Result<T, ApiError>` where E: Into<ApiError>.
+/// Helper -- convert `Result<T, E>` to `Result<T, ApiError>` where E: Into<ApiError>.
 pub type ApiResult<T> = Result<T, ApiError>;
 
 #[cfg(test)]

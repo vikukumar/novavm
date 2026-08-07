@@ -3,20 +3,20 @@
 //! Uses the **Windows Hypervisor Platform API** (WinHvPlatform.dll) that ships
 //! with Windows 10 v1803+ / Windows 11 when the "Virtual Machine Platform"
 //! optional feature is enabled. This is the *same* underlying hypervisor that
-//! powers Hyper-V â we call it directly, with no QEMU or VirtualBox required.
+//! powers Hyper-V -- we call it directly, with no QEMU or VirtualBox required.
 //!
 //! # Boot sequence
 //!
 //! 1. `create_vm`: allocate guest RAM, load BIOS ROM or kernel image, create vCPU.
 //! 2. `start_vm`: set initial vCPU registers, spawn vCPU thread + display thread.
-//! 3. vCPU loop: call `WHvRunVirtualProcessor` â handle exits (I/O port, halt).
+//! 3. vCPU loop: call `WHvRunVirtualProcessor` -> handle exits (I/O port, halt).
 //! 4. `stop_vm`: cancel vCPU, join threads, release resources.
 //!
 //! # Boot ROM
 //!
 //! If the file `bios.rom` exists in `%APPDATA%\NovaVM\` it is loaded at guest
 //! physical address 0xF0000 and execution begins at the standard reset vector
-//! 0xFFFF0 â F000:FFF0. This file can be SeaBIOS or any compatible BIOS image.
+//! 0xFFFF0 -> F000:FFF0. This file can be SeaBIOS or any compatible BIOS image.
 //!
 //! Without a BIOS ROM only **direct Linux kernel boot** is supported (the `kernel`
 //! field of `CreateVmRequest` must point to a Linux bzImage).
@@ -55,7 +55,7 @@ use windows::Win32::{
             WHvMapGpaRange, WHvPartitionPropertyCodeProcessorCount,
             WHvRunVirtualProcessor, WHvSetPartitionProperty,
             WHvSetVirtualProcessorRegisters, WHvSetupPartition,
-            // Named register constants â values match WinHvPlatform.h exactly
+            // Named register constants — values match WinHvPlatform.h exactly
             WHvX64RegisterRax, WHvX64RegisterRcx, WHvX64RegisterRdx, WHvX64RegisterRbx,
             WHvX64RegisterRsp, WHvX64RegisterRbp, WHvX64RegisterRsi, WHvX64RegisterRdi,
             WHvX64RegisterRip, WHvX64RegisterRflags,
@@ -71,7 +71,7 @@ use windows::Win32::{
     },
 };
 
-// âââ WHP property codes ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// ————————————————————————————————————————————————————————————————————————————
 // WHvPartitionPropertyCodeProcessorCount is imported directly from the windows
 // crate (value = 0x1FFF / 8191), which matches WinHvPlatformDefs.h exactly.
 #[allow(dead_code)]
@@ -670,15 +670,16 @@ fn vcpu_thread(
         let exit_reason = exit_ctx.ExitReason;
 
         match exit_reason {
-            // â”€â”€ Halt (guest executed HLT) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // --- Halt (guest executed HLT) -----------------------------------
+            // Yield execution briefly -- do NOT terminate the vCPU thread!
             WHV_RUN_VP_EXIT_REASON(8) => {
-                tracing::info!("WHP: guest executed HLT");
-                break;
+                thread::sleep(std::time::Duration::from_millis(5));
+                continue;
             }
-            // â”€â”€ Cancelled by WHvCancelRunVirtualProcessor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // --- Cancelled by WHvCancelRunVirtualProcessor -------------------
             WHV_RUN_VP_EXIT_REASON(0x2001) => break,
 
-            // â”€â”€ I/O port access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // --- I/O port access ---------------------------------------------
             WHV_RUN_VP_EXIT_REASON(2) => {
                 let io = unsafe { &exit_ctx.Anonymous.IoPortAccess };
                 let port = io.PortNumber;
@@ -698,7 +699,7 @@ fn vcpu_thread(
                         handle_bios_disk_hypercall(partition, &devices, &disk_path, hva, &vm_name);
                     }
                 } else {
-                    // Guest is reading from a port â put result in RAX
+                    // Guest is reading from a port — put result in RAX
                     let val = devices.io_read(port);
                     let mask: u64 = match access_size {
                         1 => 0xFF,
@@ -711,7 +712,7 @@ fn vcpu_thread(
                 }
             }
 
-            // ââ Memory access (MMIO) â not expected (VGA is mapped as RAM) ââââ
+            // --- Memory access (MMIO) ----------------------------------------
             WHV_RUN_VP_EXIT_REASON(1) => {
                 let _mem = unsafe { &exit_ctx.Anonymous.MemoryAccess };
                 // Inject a bus error; guest should handle or this will crash it.
@@ -828,7 +829,7 @@ fn handle_bios_disk_hypercall(
         }
 
         if !loaded {
-            // No bootable disk image — write automated OS Installer screen into VGA text memory
+            // No bootable disk image -- write automated OS Installer screen into VGA text memory
             write_os_installer_screen(hva, vm_name);
             status = 0;
         }
@@ -837,7 +838,7 @@ fn handle_bios_disk_hypercall(
     *devices.disk_status.lock().unwrap() = status;
 }
 
-// ─── VMware-Style BIOS Boot Screen & Automated OS Installer ───────────────────
+// --- VMware-Style BIOS Boot Screen & Automated OS Installer -------------------
 
 fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
@@ -853,10 +854,10 @@ fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64) {
     let header_sub   = format!("             © 2026 Vikash Kumar. https://vikukumar.github.io                ");
 
     let lines = [
-        " ┌────────────────────────────────────────────────────────────────────────────┐ ",
+        " +----------------------------------------------------------------------------+ ",
         &header_title,
         &header_sub,
-        " └────────────────────────────────────────────────────────────────────────────┘ ",
+        " +----------------------------------------------------------------------------+ ",
         "",
         &format!(" Virtual Machine : {vm_name}"),
         &format!(" Processor       : x86_64 Virtual Processor ({vcpus} vCPU)"),
@@ -903,10 +904,10 @@ fn write_os_installer_screen(hva: usize, vm_name: &str) {
     let vm_line    = format!(" Target Machine: {vm_name}");
 
     let lines = [
-        " ══════════════════════════════════════════════════════════════════════════════ ",
+        " ============================================================================== ",
         &title_line,
         &dev_line,
-        " ══════════════════════════════════════════════════════════════════════════════ ",
+        " ============================================================================== ",
         "",
         &vm_line,
         " Destination   : Primary Virtual Hard Disk (60 GB)",
@@ -917,9 +918,9 @@ fn write_os_installer_screen(hva: usize, vm_name: &str) {
         " [3/4] Copying operating system kernel & packages... DONE",
         " [4/4] Configuring NovaVM Guest Drivers and Agent...",
         "",
-        " ┌────────────────────────────────────────────────────────────────────────────┐ ",
-        " │ Progress: [==================================================] 100%        │ ",
-        " └────────────────────────────────────────────────────────────────────────────┘ ",
+        " +----------------------------------------------------------------------------+ ",
+        " | Progress: [==================================================] 100%        | ",
+        " +----------------------------------------------------------------------------+ ",
         "",
         " SUCCESS: Operating System installed successfully into NovaVM Virtual Disk!",
         " Booting OS Kernel into desktop environment...",
@@ -940,7 +941,7 @@ fn write_os_installer_screen(hva: usize, vm_name: &str) {
     }
 }
 
-// âââ CPUID emulation âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- CPUID emulation ---------------------------------------------------------
 
 fn handle_cpuid(leaf: u32) -> (u32, u32, u32, u32) {
     match leaf {
@@ -960,7 +961,7 @@ fn handle_cpuid(leaf: u32) -> (u32, u32, u32, u32) {
     }
 }
 
-// âââ Register helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- Register helpers --------------------------------------------------------
 
 fn set_reg64(
     partition: WHV_PARTITION_HANDLE,
@@ -977,7 +978,7 @@ fn set_reg64(
 
 /// Advance RIP past the faulting instruction (used after CPUID handling).
 fn advance_rip(partition: WHV_PARTITION_HANDLE, vp: u32, exit_ctx: &WHV_RUN_VP_EXIT_CONTEXT) {
-    // CPUID is always 2 bytes (0F A2) â advance past it unconditionally
+    // CPUID is always 2 bytes (0F A2) -- advance past it unconditionally
     let instr_len: u64 = 2;
     let rip = exit_ctx.VpContext.Rip;
     let _ = set_reg64(partition, vp, REG_RIP, rip.wrapping_add(instr_len));
@@ -989,7 +990,7 @@ fn set_real_mode_registers(
     vp: u32,
 ) -> Result<(), String> {
     // Real-mode initial state: CS=0xF000, EIP=0xFFF0
-    // Physical address = CS_base + IP = 0xFFFF0 â reads "EA 00 00 00 F0" (JMP FAR)
+    // Physical address = CS_base + IP = 0xFFFF0 -> reads "EA 00 00 00 F0" (JMP FAR)
 
     let make_seg = |base: u64, limit: u32, selector: u16, attrs: u16| -> WHV_REGISTER_VALUE {
         let mut v = WHV_REGISTER_VALUE::default();
@@ -1064,7 +1065,7 @@ fn set_real_mode_registers(
     .map_err(|e| e.to_string())
 }
 
-// âââ BIOS ROM loading ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- BIOS ROM loading --------------------------------------------------------
 
 /// Try to load `bios.rom` from `%APPDATA%\NovaVM\`. Returns None if not found.
 fn load_bios_rom() -> Option<Vec<u8>> {
