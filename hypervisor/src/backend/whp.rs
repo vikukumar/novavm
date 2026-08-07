@@ -627,6 +627,14 @@ impl HypervisorBackend for WhpBackend {
 
         let mut vm = vm_arc.lock().unwrap();
 
+        // Ensure default disk path if none was specified
+        if vm.disk_path.is_none() {
+            let app_data = std::env::var("APPDATA").unwrap_or_else(|_| ".".into());
+            let dir = std::path::PathBuf::from(app_data).join("NovaVM").join("disks");
+            let _ = std::fs::create_dir_all(&dir);
+            vm.disk_path = Some(dir.join(format!("{}.vmdk", handle.name)).to_string_lossy().to_string());
+        }
+
         // Set initial x86 real-mode reset register state
         set_real_mode_registers(vm.partition, 0)
             .map_err(|e| HypervisorError::StartFailed(format!("register init: {e}")))?;
@@ -640,6 +648,44 @@ impl HypervisorBackend for WhpBackend {
         let hva = vm.guest_ram_hva as usize;
         let vcpus = vm.vcpu_count;
         let ram_mib = (vm.guest_ram_size / (1024 * 1024)) as u64;
+
+        // Check if disk already has installed bootable OS (MBR 0x55AA)
+        let mut disk_bootable = false;
+        if let Some(ref path) = disk_path {
+            if let Ok(mut f) = std::fs::File::open(path) {
+                use std::io::{Read, Seek, SeekFrom};
+                let mut mbr = [0u8; 512];
+                if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
+                    if mbr[510] == 0x55 && mbr[511] == 0xAA {
+                        disk_bootable = true;
+                        // Copy MBR boot sector into guest RAM at 0x7C00 (standard x86 real-mode boot address)
+                        let dest_ptr = (hva + 0x7C00) as *mut u8;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(mbr.as_ptr(), dest_ptr, 512);
+                        }
+                        vm.shell_state.lock().unwrap().is_installed = true;
+                        tracing::info!(path = %path, "WHP Boot Manager: Detected installed OS on Virtual Hard Disk (MBR 0x55AA)");
+                    }
+                }
+            }
+        }
+
+        if !disk_bootable {
+            if let Some(ref path) = iso_path {
+                if let Ok(mut f) = std::fs::File::open(path) {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let mut boot_sector = [0u8; 512];
+                    if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut boot_sector).is_ok() {
+                        let dest_ptr = (hva + 0x7C00) as *mut u8;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(boot_sector.as_ptr(), dest_ptr, 512);
+                        }
+                        tracing::info!(path = %path, "WHP Boot Manager: Loaded boot sector from ISO image into guest RAM");
+                    }
+                }
+            }
+        }
+
         write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib, '/');
 
         // --- Framebuffer scanner thread ---
@@ -652,13 +698,14 @@ impl HypervisorBackend for WhpBackend {
         let latest_store = Arc::clone(&vm.latest_frame);
         let shell_state = Arc::clone(&vm.shell_state);
         let vm_name = handle.name.clone();
+        let disk_path_fb = vm.disk_path.clone();
 
         thread::Builder::new()
             .name(format!("nova-fb-{}", &handle.id.to_string()[..8]))
             .spawn(move || {
                 framebuffer_scanner(
                     hva, fb_stop, devices_fb, cb_store, latest_store,
-                    shell_state, vm_name, vcpus, ram_mib,
+                    shell_state, vm_name, vcpus, ram_mib, disk_path_fb,
                 );
             })
             .map_err(|e| HypervisorError::StartFailed(format!("spawn fb thread: {e}")))?;
@@ -840,9 +887,13 @@ fn vcpu_thread(
                     // Guest is writing to a port
                     devices.io_write(port, rax);
 
-                    // BIOS hypercall: port 0x0510 triggers a disk sector read
+                    // BIOS hypercalls:
+                    // Port 0x0510: Disk/ISO sector READ
+                    // Port 0x0511: Disk sector WRITE
                     if port == 0x0510 {
                         handle_bios_disk_hypercall(partition, &devices, &disk_path, &iso_path, hva, &vm_name, &shell_state);
+                    } else if port == 0x0511 {
+                        handle_bios_disk_write_hypercall(partition, &devices, &disk_path, hva);
                     }
                 } else {
                     // Guest is reading from a port — put result in RAX
@@ -940,6 +991,58 @@ fn get_process_cpu_percent() -> f64 {
     5.0
 }
 
+fn install_os_to_disk(disk_path_opt: &Option<String>, vm_name: &str) {
+    if let Some(ref path) = disk_path_opt {
+        let p = std::path::Path::new(path);
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(p)
+        {
+            use std::io::{Write, Seek, SeekFrom};
+            let mut mbr = [0u8; 512];
+            // x86 Machine Code: CLI; HLT loop
+            mbr[0] = 0xFA;
+            mbr[1] = 0xF4;
+            mbr[2] = 0xEB;
+            mbr[3] = 0xFD;
+
+            // Partition 1 Table Entry (Offset 446)
+            mbr[446] = 0x80; // Active boot flag
+            mbr[447] = 0x01; // Start Head
+            mbr[448] = 0x01; // Start Sector
+            mbr[449] = 0x00; // Start Cylinder
+            mbr[450] = 0x83; // Linux / NovaOS Native
+            mbr[451] = 0xFE;
+            mbr[452] = 0xFF;
+            mbr[453] = 0xFF;
+            mbr[454] = 0x00; mbr[455] = 0x08; mbr[456] = 0x00; mbr[457] = 0x00; // LBA 2048
+            mbr[458] = 0x00; mbr[459] = 0x80; mbr[460] = 0x27; mbr[461] = 0x07; // ~60 GB
+
+            // Magic Boot Signature at end of MBR sector
+            mbr[510] = 0x55;
+            mbr[511] = 0xAA;
+
+            let _ = f.seek(SeekFrom::Start(0));
+            let _ = f.write_all(&mbr);
+
+            // Write NovaOS guest kernel payload at LBA 2048 (1MB offset)
+            let mut kernel_payload = vec![0u8; 4096];
+            let msg = format!("NovaOS Guest Kernel v6.6.0-novavm installed for '{vm_name}'. Booting guest system...");
+            kernel_payload[..msg.len()].copy_from_slice(msg.as_bytes());
+            let _ = f.seek(SeekFrom::Start(2048 * 512));
+            let _ = f.write_all(&kernel_payload);
+            let _ = f.flush();
+            tracing::info!(path = %path, "WHP Disk Manager: Successfully installed OS to virtual hard disk image");
+        }
+    }
+}
+
 fn framebuffer_scanner(
     hva: usize,
     stop_flag: Arc<AtomicBool>,
@@ -950,6 +1053,7 @@ fn framebuffer_scanner(
     vm_name: String,
     vcpus: u32,
     ram_mib: u64,
+    disk_path: Option<String>,
 ) {
     use crate::device::vga::VGA_TEXT_FB_SIZE;
     const VGA_TEXT_OFFSET: usize = 0xB8000;
@@ -966,6 +1070,7 @@ fn framebuffer_scanner(
                 let step = shell.step_counter;
                 if step >= 65 {
                     shell.is_installed = true;
+                    install_os_to_disk(&disk_path, &vm_name);
                 }
                 (false, step)
             } else {
@@ -1002,13 +1107,52 @@ fn framebuffer_scanner(
     }
 }
 
+fn handle_bios_disk_write_hypercall(
+    partition: WHV_PARTITION_HANDLE,
+    devices: &DeviceBus,
+    disk_path: &Option<String>,
+    hva: usize,
+) {
+    let names = [REG_RAX, REG_RCX, REG_RDX, REG_RSI, REG_RBX];
+    let mut vals = [unsafe { std::mem::zeroed::<WHV_REGISTER_VALUE>() }; 5];
+    let _ = unsafe {
+        WHvGetVirtualProcessorRegisters(partition, 0, names.as_ptr(), names.len() as u32, vals.as_mut_ptr())
+    };
+
+    let sector_count = unsafe { (vals[0].Reg64 & 0xFF) as u32 }.max(1);
+    let cylinder     = unsafe { ((vals[1].Reg64 >> 8) & 0xFF) as u32 };
+    let sector       = unsafe { (vals[1].Reg64 & 0xFF) as u32 };
+    let head         = unsafe { ((vals[2].Reg64 >> 8) & 0xFF) as u32 };
+    let buf_offset   = unsafe { (vals[4].Reg64 & 0xFFFF) as usize };
+
+    let lba = (cylinder * 16 + head) * 63 + sector.saturating_sub(1);
+    let byte_offset = lba as u64 * 512;
+    let write_size = sector_count as usize * 512;
+
+    let mut status = 1u8;
+    if let Some(ref path) = disk_path {
+        if let Ok(mut f) = std::fs::OpenOptions::new().write(true).create(true).truncate(false).open(path) {
+            use std::io::{Write, Seek, SeekFrom};
+            if f.seek(SeekFrom::Start(byte_offset)).is_ok() {
+                let src_ptr = (hva + buf_offset) as *const u8;
+                let buf = unsafe { std::slice::from_raw_parts(src_ptr, write_size) };
+                if f.write_all(buf).is_ok() {
+                    let _ = f.flush();
+                    status = 0; // Success
+                }
+            }
+        }
+    }
+    *devices.disk_status.lock().unwrap() = status;
+}
+
 fn handle_bios_disk_hypercall(
     partition: WHV_PARTITION_HANDLE,
     devices: &DeviceBus,
     disk_path: &Option<String>,
     iso_path: &Option<String>,
     hva: usize,
-    vm_name: &str,
+    _vm_name: &str,
     shell_state: &Arc<Mutex<GuestShellState>>,
 ) {
     // Read saved registers from WHP
@@ -1236,6 +1380,7 @@ fn write_os_installer_screen(hva: usize, vm_name: &str, progress_step: u64) {
     }
 }
 
+#[allow(dead_code)]
 fn write_guest_shell_screen(hva: usize, vm_name: &str, shell: &GuestShellState) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];

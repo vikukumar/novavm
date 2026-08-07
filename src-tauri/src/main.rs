@@ -14,7 +14,6 @@ use std::time::Duration;
 
 use tauri::Manager;
 
-use monitor::MetricsCollector;
 use state::AppState;
 
 fn main() {
