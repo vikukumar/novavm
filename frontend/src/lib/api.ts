@@ -90,6 +90,9 @@ export const vmApi = {
   getFramebuffer: (vmId: string): Promise<unknown> =>
     call('get_vm_framebuffer', { vmId }),
 
+  sendInput: (vmId: string, inputType: string, key: string): Promise<void> =>
+    call('send_vm_input', { vmId, inputType, key }),
+
   /** Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS. */
   runScript: (
     vmId: string,

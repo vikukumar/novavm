@@ -6,7 +6,7 @@ use uuid::Uuid;
 use api::{ApiError, ApiResult, CreateVmRequest, CreateVmResponse, VmSummary};
 use engine::VmConfig;
 
-use crate::state::AppState;
+use crate::state::{AppState, FramebufferFrame};
 
 /// List all VMs with summary information.
 #[tauri::command]
@@ -345,16 +345,6 @@ pub async fn get_vm_framebuffer(
     vm_id: Uuid,
     state: State<'_, AppState>,
 ) -> ApiResult<serde_json::Value> {
-    if let Some(frame) = state.get_framebuffer(vm_id) {
-        return Ok(serde_json::json!({
-            "available": true,
-            "width": frame.width,
-            "height": frame.height,
-            "rgba_b64": frame.rgba_b64,
-            "seq": frame.seq,
-        }));
-    }
-
     #[cfg(target_os = "windows")]
     {
         use hypervisor::backend::WhpBackend;
@@ -363,7 +353,9 @@ pub async fn get_vm_framebuffer(
         if let Some(whp) = backend.as_any().downcast_ref::<WhpBackend>() {
             if let Some((w, h, rgba)) = whp.get_framebuffer_frame(&vm_id) {
                 let b64 = base64::engine::general_purpose::STANDARD.encode(&rgba);
-                let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq: 1 };
+                static SEQ_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+                let seq = SEQ_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq };
                 state.framebuffers.lock().insert(vm_id, frame.clone());
                 return Ok(serde_json::json!({
                     "available": true,
@@ -376,21 +368,31 @@ pub async fn get_vm_framebuffer(
         }
     }
 
-    // Fallback: If VM is in Running state, generate initial NovaVM boot frame
+    if let Some(frame) = state.get_framebuffer(vm_id) {
+        return Ok(serde_json::json!({
+            "available": true,
+            "width": frame.width,
+            "height": frame.height,
+            "rgba_b64": frame.rgba_b64,
+            "seq": frame.seq,
+        }));
+    }
+
+    // Dynamic Fallback: If VM is in Running state, generate live NovaVM boot frame
     if let Some(vm_handle) = state.engine.registry().get(&vm_id) {
         let vm = vm_handle.read().await;
         if *vm.state() == engine::VmState::Running {
             let (w, h, rgba) = generate_novavm_boot_frame(&vm.config().name);
             use base64::Engine as _;
             let b64 = base64::engine::general_purpose::STANDARD.encode(&rgba);
-            let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq: 1 };
-            state.framebuffers.lock().insert(vm_id, frame.clone());
+            static FALLBACK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+            let seq = FALLBACK_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(serde_json::json!({
                 "available": true,
-                "width": frame.width,
-                "height": frame.height,
-                "rgba_b64": frame.rgba_b64,
-                "seq": frame.seq,
+                "width": w,
+                "height": h,
+                "rgba_b64": b64,
+                "seq": seq,
             }));
         }
     }
@@ -434,6 +436,26 @@ fn generate_novavm_boot_frame(name: &str) -> (u32, u32, Vec<u8>) {
     }
     vga.sync_from_guest_ram(&raw_buf);
     vga.render_to_rgba()
+}
+
+/// Send interactive keyboard/mouse input to a running VM.
+#[tauri::command]
+pub async fn send_vm_input(
+    vm_id: Uuid,
+    input_type: String,
+    key: String,
+    state: State<'_, AppState>,
+) -> ApiResult<()> {
+    let _ = input_type;
+    #[cfg(target_os = "windows")]
+    {
+        use hypervisor::backend::WhpBackend;
+        let backend = state.engine.hypervisor();
+        if let Some(whp) = backend.as_any().downcast_ref::<WhpBackend>() {
+            whp.send_keyboard_input(&vm_id, &key);
+        }
+    }
+    Ok(())
 }
 
 /// Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS.

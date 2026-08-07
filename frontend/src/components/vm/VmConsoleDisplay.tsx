@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Play, Pause, Square, RotateCcw, Monitor,
   Maximize2, Cpu, Keyboard, MousePointer,
@@ -22,8 +22,10 @@ interface VmConsoleDisplayProps {
 
 function VmCanvas({ vmId, active }: { vmId: string; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const timerRef  = useRef<number>(0)
   const lastSeq   = useRef<number>(-999)
+  const [captured, setCaptured] = useState(false)
 
   useEffect(() => {
     if (!active) return
@@ -75,9 +77,43 @@ function VmCanvas({ vmId, active }: { vmId: string; active: boolean }) {
     }
   }, [vmId, active])
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!active) return
+    if (e.key === 'Escape') {
+      setCaptured(false)
+      containerRef.current?.blur()
+      return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+    vmApi.sendInput(vmId, 'keydown', e.key).catch(() => {})
+  }
+
   return (
-    <div className="relative w-full flex items-center justify-center bg-black rounded-xl overflow-hidden"
-         style={{ aspectRatio: '8/5', minHeight: 320 }}>
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      onClick={() => {
+        if (active) {
+          setCaptured(true)
+          containerRef.current?.focus()
+        }
+      }}
+      onKeyDown={handleKeyDown}
+      onBlur={() => setCaptured(false)}
+      className={cn(
+        'relative w-full flex items-center justify-center bg-black rounded-xl overflow-hidden cursor-pointer transition-all duration-200 outline-none',
+        captured ? 'ring-2 ring-violet-500 shadow-lg shadow-violet-500/20' : 'hover:ring-1 hover:ring-violet-500/50'
+      )}
+      style={{ aspectRatio: '8/5', minHeight: 320 }}
+    >
+      {/* Input capture overlay banner */}
+      {captured && (
+        <div className="absolute top-2 left-2 z-30 px-3 py-1 rounded-md text-xs font-medium bg-emerald-500/90 text-black backdrop-blur-md shadow-md animate-pulse">
+          Keyboard Captured — Type to control VM | Press Esc to Release
+        </div>
+      )}
+
       {/* CRT scanline overlay */}
       <div className="absolute inset-0 pointer-events-none z-10"
            style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.07) 1px, rgba(0,0,0,0.07) 2px)' }} />
@@ -89,7 +125,7 @@ function VmCanvas({ vmId, active }: { vmId: string; active: boolean }) {
       {/* Corner badge */}
       <div className="absolute top-2 right-2 z-20 px-2 py-0.5 rounded text-[9px] font-mono font-semibold
                       bg-violet-500/20 text-violet-300 border border-violet-500/30 backdrop-blur-sm">
-        NovaVM Display
+        NovaVM Display {captured ? '(Interactive)' : '(Click to Focus)'}
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { monitorApi } from '@/lib/api'
+import { useVmStore } from '@/stores/vmStore'
 import type { HostMetrics, VmMetrics } from '@/types'
 
 const MAX_HISTORY = 60
@@ -59,6 +60,12 @@ export const useMetricsStore = create<MetricsStore>((set, get) => ({
 
     const id = setInterval(() => {
       get().fetchHostMetrics()
+      const vms = useVmStore.getState().vms
+      for (const vm of vms) {
+        if (vm.state === 'running') {
+          get().fetchVmMetrics(vm.id)
+        }
+      }
     }, intervalMs)
 
     set({ pollingActive: true, intervalId: id })
