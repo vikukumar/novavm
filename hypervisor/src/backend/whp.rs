@@ -78,7 +78,7 @@ use windows::Win32::{
 const WHV_PROP_EXTENDED_VM_EXITS: WHV_PARTITION_PROPERTY_CODE =
     WHV_PARTITION_PROPERTY_CODE(0x0000_0001);
 
-// âââ WHP map-range flags âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- WHP map-range flags -----------------------------------------------------
 const MAP_READ: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x01);
 const MAP_WRITE: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x02);
 const MAP_EXEC: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x04);
@@ -87,10 +87,10 @@ const MAP_RWX: WHV_MAP_GPA_RANGE_FLAGS =
 const MAP_RX: WHV_MAP_GPA_RANGE_FLAGS =
     WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_EXEC.0);
 
-// âââ Register name aliases âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- Register name aliases ---------------------------------------------------
 // These are thin aliases over the official WHvX64Register* constants imported
 // from windows::Win32::System::Hypervisor. Using SDK constants directly
-// guarantees correctness â no hand-rolled hex values that can silently drift.
+// guarantees correctness — no hand-rolled hex values that can silently drift.
 const REG_RAX:    WHV_REGISTER_NAME = WHvX64RegisterRax;
 const REG_RCX:    WHV_REGISTER_NAME = WHvX64RegisterRcx;
 const REG_RDX:    WHV_REGISTER_NAME = WHvX64RegisterRdx;
@@ -121,7 +121,7 @@ const REG_IDTR:   WHV_REGISTER_NAME = WHvX64RegisterIdtr; // = 26
 #[allow(dead_code)]
 const RESET_VECTOR: u64 = 0x000F_FFF0;
 
-// âââ Guest physical memory layout âââââââââââââââââââââââââââââââââââââââââââââ
+// --- Guest physical memory layout --------------------------------------------
 const RAM_LOW_BASE: u64 = 0x0000_0000;
 const RAM_LOW_SIZE: u64 = 0x000A_0000;
 const VGA_FB_BASE: u64 = 0x000A_0000; // VGA framebuffer (128 KB)
@@ -131,7 +131,7 @@ const BIOS_ROM_SIZE: u64 = 0x0001_0000;
 const RAM_HIGH_BASE: u64 = 0x0010_0000; // Extended RAM starts at 1 MB
 const DEFAULT_HIGH_RAM: u64 = 512 * 1024 * 1024; // 512 MB above 1 MB
 
-// âââ Minimal BIOS ROM stub ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- Minimal BIOS ROM stub ---------------------------------------------------
 // 64 KB of zeros except:
 //   offset 0x0000: BIOS entry (x86 real-mode code, runs after reset JMP)
 //   offset 0xFFF0: far JMP 0xF000:0x0000 (reset vector, 5 bytes)
@@ -145,7 +145,7 @@ const DEFAULT_HIGH_RAM: u64 = 512 * 1024 * 1024; // 512 MB above 1 MB
 fn build_minimal_bios_rom() -> Vec<u8> {
     let mut rom = vec![0u8; BIOS_ROM_SIZE as usize];
 
-    // ââ Entry code at offset 0x0000 (executed after reset JMP) âââââââââââââââ
+    // --- Entry code at offset 0x0000 (executed after reset JMP) ---
     let entry: &[u8] = &[
         // Initialise segment registers and stack
         0xFA,             // CLI
@@ -212,8 +212,8 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     ];
     rom[..entry.len()].copy_from_slice(entry);
 
-    // ââ INT 13h handler at offset 0x0200 ââââââââââââââââââââââââââââââââââââââ
-    // Writes disk-read params to BIOS data area (0x0500â0x050F) then triggers
+    // --- INT 13h handler at offset 0x0200 ---
+    // Writes disk-read params to BIOS data area (0x0500–0x050F) then triggers
     // NovaVM BIOS hypercall via port 0x0510. The WHP exit handler reads the
     // request, performs the file I/O, writes the sector data to guest RAM,
     // sets 0x0511 status, and resumes the vCPU.
@@ -226,10 +226,10 @@ fn build_minimal_bios_rom() -> Vec<u8> {
         0x89, 0x0E, 0x04, 0x05,       // MOV [0x0504], CX  (cyl + sector)
         0x89, 0x16, 0x06, 0x05,       // MOV [0x0506], DX  (head + drive)
         0x8C, 0x06, 0x08, 0x05,       // MOV [0x0508], ES  (buffer segment)
-        // OUT 0x0510, AL  â trigger hypervisor disk-read
+        // OUT 0x0510, AL  → trigger hypervisor disk-read
         0xBA, 0x10, 0x05,              // MOV DX, 0x0510
         0xEE,                          // OUT DX, AL
-        // IN AL, 0x0511  â read result (0=ok, 1=error)
+        // IN AL, 0x0511  → read result (0=ok, 1=error)
         0xBA, 0x11, 0x05,              // MOV DX, 0x0511
         0xEC,                          // IN AL, DX
         0x3C, 0x00,                    // CMP AL, 0
@@ -247,10 +247,10 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     ];
     rom[0x0200..0x0200 + int13.len()].copy_from_slice(int13);
 
-    // ââ INT 10h stub at offset 0x0300 (just IRET) âââââââââââââââââââââââââââââ
+    // --- INT 10h stub at offset 0x0300 (just IRET) ---
     rom[0x0300] = 0xCF; // IRET
 
-    // ââ Reset vector at offset 0xFFF0: JMP FAR 0xF000:0x0000 âââââââââââââââââ
+    // --- Reset vector at offset 0xFFF0: JMP FAR 0xF000:0x0000 ---
     // x86 bytes: EA 00 00 00 F0
     let reset = &[0xEA_u8, 0x00, 0x00, 0x00, 0xF0];
     rom[0xFFF0..0xFFF5].copy_from_slice(reset);
@@ -258,7 +258,7 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     rom
 }
 
-// âââ Per-VM state ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- Per-VM state ------------------------------------------------------------
 
 /// Type alias for the framebuffer output callback.
 /// Invoked by the framebuffer scanner thread with (width, height, rgba_bytes)
@@ -283,7 +283,7 @@ struct WhpVm {
     devices: Arc<DeviceBus>,
     /// Optional path to a disk image (.img / .iso) used for BIOS INT 13h reads.
     disk_path: Option<String>,
-    /// Framebuffer output callback â called at ~30fps with rendered RGBA pixels.
+    /// Framebuffer output callback — called at ~30fps with rendered RGBA pixels.
     framebuffer_cb: Option<FramebufferCallback>,
 }
 
@@ -304,7 +304,7 @@ unsafe impl Sync for WhpVm {}
 
 impl Drop for WhpVm {
     fn drop(&mut self) {
-        // Best-effort cleanup â errors are logged, not propagated.
+        // Best-effort cleanup — errors are logged, not propagated.
         unsafe {
             let _ = WHvDeletePartition(self.partition);
         }
@@ -316,7 +316,7 @@ impl Drop for WhpVm {
     }
 }
 
-// âââ WHP Backend ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// --- WHP Backend -------------------------------------------------------------
 
 /// Native Windows Hypervisor Platform backend.
 ///
@@ -393,11 +393,11 @@ impl HypervisorBackend for WhpBackend {
             "WHP: creating VM partition"
         );
 
-        // ââ 1. Create WHP partition ââââââââââââââââââââââââââââââââââââââââââââ
+        // --- 1. Create WHP partition ---
         let partition = unsafe { WHvCreatePartition() }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvCreatePartition: {e}")))?;
 
-        // ââ 2. Set vCPU count âââââââââââââââââââââââââââââââââââââââââââââââââ
+        // --- 2. Set vCPU count ---
         // WHvPartitionPropertyCodeProcessorCount requires a plain UINT32 buffer
         // (4 bytes), NOT the full WHV_PARTITION_PROPERTY union. Passing the
         // wrong size causes error 0x80370302 (property does not exist).
@@ -412,16 +412,16 @@ impl HypervisorBackend for WhpBackend {
         }
         .map_err(|e| HypervisorError::CreateFailed(format!("WHvSetPartitionProperty(cpu): {e}")))?;
 
-        // ââ 3. Request I/O-port exit delivery ââââââââââââââââââââââââââââââââ
+        // --- 3. Request I/O-port exit delivery ---
         // ExceptionExitBitmap and ExtendedVmExits let us see IO port accesses.
         // For basic IO port exits we set the ExtendedVmExits with EmulateApicPageAccesses=0.
         // WHP delivers IO port exits by default (no special flag needed for basic ports).
 
-        // ââ 4. Finalise partition âââââââââââââââââââââââââââââââââââââââââââââ
+        // --- 4. Finalise partition ---
         unsafe { WHvSetupPartition(partition) }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvSetupPartition: {e}")))?;
 
-        // ââ 5. Allocate host memory for guest RAM âââââââââââââââââââââââââââââ
+        // --- 5. Allocate host memory for guest RAM ---
         let total_host_ram = RAM_LOW_SIZE as usize     // 640 KB low
             + VGA_FB_SIZE as usize                     // 128 KB VGA
             + BIOS_ROM_SIZE as usize                   // 64 KB BIOS
@@ -449,37 +449,37 @@ impl HypervisorBackend for WhpBackend {
         let bios_hva = unsafe { host_mem.add((RAM_LOW_SIZE + VGA_FB_SIZE) as usize) };
         let high_hva = unsafe { host_mem.add((RAM_LOW_SIZE + VGA_FB_SIZE + BIOS_ROM_SIZE) as usize) };
 
-        // ââ 6. Load BIOS ROM ââââââââââââââââââââââââââââââââââââââââââââââââââ
+        // --- 6. Load BIOS ROM ---
         let bios_rom = load_bios_rom().unwrap_or_else(build_minimal_bios_rom);
         let copy_size = bios_rom.len().min(BIOS_ROM_SIZE as usize);
         unsafe {
             std::ptr::copy_nonoverlapping(bios_rom.as_ptr(), bios_hva, copy_size);
         }
 
-        // ââ 7. Load disk image into VGA RAM area as scratch for INT 13h âââââââ
+        // --- 7. Load disk image into VGA RAM area as scratch for INT 13h ---
         // (The actual disk read is done lazily by the I/O port hypercall handler)
 
-        // ââ 8. Map guest physical memory into partition âââââââââââââââââââââââ
-        // Low RAM: 0x00000 â 0x9FFFF (R/W/X)
+        // --- 8. Map guest physical memory into partition ---
+        // Low RAM: 0x00000 – 0x9FFFF (R/W/X)
         unsafe {
             WHvMapGpaRange(partition, low_hva as *const c_void, RAM_LOW_BASE, RAM_LOW_SIZE, MAP_RWX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map low RAM: {e}")))?;
 
-        // VGA framebuffer: 0xA0000 â 0xBFFFF (R/W â no execute)
+        // VGA framebuffer: 0xA0000 – 0xBFFFF (R/W — no execute)
         let vga_flags = WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_WRITE.0);
         unsafe {
             WHvMapGpaRange(partition, vga_hva as *const c_void, VGA_FB_BASE, VGA_FB_SIZE, vga_flags)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map VGA RAM: {e}")))?;
 
-        // BIOS ROM: 0xF0000 â 0xFFFFF (R/X)
+        // BIOS ROM: 0xF0000 – 0xFFFFF (R/X)
         unsafe {
             WHvMapGpaRange(partition, bios_hva as *const c_void, BIOS_ROM_BASE, BIOS_ROM_SIZE, MAP_RX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map BIOS ROM: {e}")))?;
 
-        // High RAM: 0x100000 â end (R/W/X)
+        // High RAM: 0x100000 – end (R/W/X)
         unsafe {
             WHvMapGpaRange(
                 partition,
@@ -491,7 +491,7 @@ impl HypervisorBackend for WhpBackend {
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map high RAM: {e}")))?;
 
-        // ââ 9. Create vCPU 0 ââââââââââââââââââââââââââââââââââââââââââââââââââ
+        // --- 9. Create vCPU 0 ---
         unsafe { WHvCreateVirtualProcessor(partition, 0, 0) }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvCreateVirtualProcessor: {e}")))?;
 
@@ -535,14 +535,18 @@ impl HypervisorBackend for WhpBackend {
         let devices = Arc::clone(&vm.devices);
         let partition = vm.partition;
         let disk_path = vm.disk_path.clone();
+        let hva = vm.guest_ram_hva as usize;
+        let vcpus = vm.vcpu_count;
+        let ram_mib = (vm.guest_ram_size / (1024 * 1024)) as u64;
+        write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib);
 
-        // ââ Framebuffer scanner thread âââââââââââââââââââââââââââââââââââââââ
+        // --- Framebuffer scanner thread ---
         // Reads VGA text mode RAM from host memory at offset 0xB8000 every ~33ms,
         // renders it to RGBA via VgaDevice, and fires the callback.
         if let Some(cb) = vm.framebuffer_cb.clone() {
             let fb_stop = Arc::clone(&vm.stop_flag);
             // SAFETY: guest_ram_hva is valid for the lifetime of the WhpVm
-            // (VirtualAlloc'd and freed in Drop). The scanner only reads â never writes.
+            // (VirtualAlloc'd and freed in Drop). The scanner only reads — never writes.
             let hva = vm.guest_ram_hva as usize; // convert to usize to cross thread boundary
             let devices_fb = Arc::clone(&vm.devices);
             thread::Builder::new()
@@ -553,12 +557,12 @@ impl HypervisorBackend for WhpBackend {
                 .map_err(|e| HypervisorError::StartFailed(format!("spawn fb thread: {e}")))?;
         }
 
-        // ââ vCPU execution thread ââââââââââââââââââââââââââââââââââââââââââââ
+        // --- vCPU execution thread ---
         let name = handle.name.clone();
         let t = thread::Builder::new()
             .name(format!("whp-vcpu0-{}", &handle.id.to_string()[..8]))
             .spawn(move || {
-                vcpu_thread(partition, 0, stop_flag, devices, disk_path, name);
+                vcpu_thread(partition, 0, stop_flag, devices, disk_path, name, hva);
             })
             .map_err(|e| HypervisorError::StartFailed(format!("spawn vCPU thread: {e}")))?;
 
@@ -572,7 +576,7 @@ impl HypervisorBackend for WhpBackend {
             HypervisorError::PauseFailed(format!("VM {} not found", handle.id))
         })?;
         let vm = vm_arc.lock().unwrap();
-        // Set stop flag â vCPU thread will pause at next iteration
+        // Set stop flag — vCPU thread will pause at next iteration
         vm.stop_flag.store(true, Ordering::SeqCst);
         unsafe {
             let _ = WHvCancelRunVirtualProcessor(vm.partition, 0, 0);
@@ -625,7 +629,7 @@ impl HypervisorBackend for WhpBackend {
 }
 
 
-// âââ vCPU execution thread ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// â”€â”€â”€ vCPU execution thread â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 fn vcpu_thread(
     partition: WHV_PARTITION_HANDLE,
@@ -634,6 +638,7 @@ fn vcpu_thread(
     devices: Arc<DeviceBus>,
     disk_path: Option<String>,
     vm_name: String,
+    hva: usize,
 ) {
     tracing::info!(vp = vp_index, vm = %vm_name, "WHP vCPU thread running");
     let exit_ctx_size = std::mem::size_of::<WHV_RUN_VP_EXIT_CONTEXT>() as u32;
@@ -656,7 +661,7 @@ fn vcpu_thread(
         if let Err(e) = run_result {
             // 0x8007139F = "The requested operation was canceled" (from WHvCancelRunVirtualProcessor)
             if e.code().0 as u32 == 0x8007_139F {
-                break; // cancelled â stop gracefully
+                break; // cancelled â€” stop gracefully
             }
             tracing::error!(err = %e, "WHvRunVirtualProcessor error");
             break;
@@ -665,15 +670,15 @@ fn vcpu_thread(
         let exit_reason = exit_ctx.ExitReason;
 
         match exit_reason {
-            // ââ Halt (guest executed HLT) ââââââââââââââââââââââââââââââââââââââ
+            // â”€â”€ Halt (guest executed HLT) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             WHV_RUN_VP_EXIT_REASON(8) => {
                 tracing::info!("WHP: guest executed HLT");
                 break;
             }
-            // ââ Cancelled by WHvCancelRunVirtualProcessor ââââââââââââââââââââââ
+            // â”€â”€ Cancelled by WHvCancelRunVirtualProcessor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             WHV_RUN_VP_EXIT_REASON(0x2001) => break,
 
-            // ââ I/O port access âââââââââââââââââââââââââââââââââââââââââââââââ
+            // â”€â”€ I/O port access â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             WHV_RUN_VP_EXIT_REASON(2) => {
                 let io = unsafe { &exit_ctx.Anonymous.IoPortAccess };
                 let port = io.PortNumber;
@@ -690,7 +695,7 @@ fn vcpu_thread(
 
                     // BIOS hypercall: port 0x0510 triggers a disk sector read
                     if port == 0x0510 {
-                        handle_bios_disk_hypercall(partition, &devices, &disk_path);
+                        handle_bios_disk_hypercall(partition, &devices, &disk_path, hva, &vm_name);
                     }
                 } else {
                     // Guest is reading from a port â put result in RAX
@@ -719,7 +724,54 @@ fn vcpu_thread(
                 let cpuid = unsafe { &exit_ctx.Anonymous.CpuidAccess };
                 let (eax, ebx, ecx, edx) = handle_cpuid(cpuid.Rax as u32);
                 let _ = set_reg64(partition, vp_index, REG_RAX, eax as u64);
-                let _ = set_reg64(partition, vp_index, REG_RBfn handle_bios_disk_hypercall(
+                let _ = set_reg64(partition, vp_index, REG_RBX, ebx as u64);
+                let _ = set_reg64(partition, vp_index, REG_RCX, ecx as u64);
+                let _ = set_reg64(partition, vp_index, REG_RDI, edx as u64);
+                advance_rip(partition, vp_index, &exit_ctx);
+            }
+
+            // ── Unrecoverable exception ────────────────────────────────────────
+            WHV_RUN_VP_EXIT_REASON(4) => {
+                tracing::error!("WHP: unrecoverable exception in guest — stopping vCPU");
+                break;
+            }
+
+            other => {
+                tracing::trace!(reason = other.0, "WHP: unhandled exit reason");
+            }
+        }
+    }
+
+    tracing::info!(vp = vp_index, vm = %vm_name, "WHP vCPU thread exiting");
+}
+
+
+fn framebuffer_scanner(
+    hva: usize,
+    stop_flag: Arc<AtomicBool>,
+    devices: Arc<DeviceBus>,
+    cb: FramebufferCallback,
+) {
+    use crate::device::vga::VGA_TEXT_FB_SIZE;
+    const VGA_TEXT_OFFSET: usize = 0xB8000;
+    let mut seq: u64 = 0;
+    while !stop_flag.load(Ordering::Relaxed) {
+        let text_slice: &[u8] = unsafe {
+            std::slice::from_raw_parts((hva + VGA_TEXT_OFFSET) as *const u8, VGA_TEXT_FB_SIZE)
+        };
+        {
+            let mut vga = devices.vga.lock().unwrap();
+            vga.sync_from_guest_ram(text_slice);
+            let (w, h, rgba) = vga.render_to_rgba();
+            drop(vga);
+            cb(w, h, rgba);
+        }
+        seq = seq.wrapping_add(1);
+        thread::sleep(std::time::Duration::from_millis(33));
+    }
+}
+
+fn handle_bios_disk_hypercall(
     partition: WHV_PARTITION_HANDLE,
     devices: &DeviceBus,
     disk_path: &Option<String>,
@@ -886,92 +938,6 @@ fn write_os_installer_screen(hva: usize, vm_name: &str) {
     unsafe {
         std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
     }
-}aVM framebuffer scanner thread exiting");
-}
-
-// âââ BIOS disk-read hypercall âââââââââââââââââââââââââââââââââââââââââââââââââ
-
-/// Handle the BIOS INT 13h hypercall triggered by the guest writing to port 0x0510.
-///
-/// The BIOS stub at F000:0200 has written disk-read parameters to guest memory
-/// at physical address 0x0500:
-/// - [0x0500]: AX (AH=2=read, AL=sector count)
-/// - [0x0502]: BX (buffer offset)
-/// - [0x0504]: CX (CH=cylinder, CL=sector)
-/// - [0x0506]: DX (DH=head, DL=drive)
-/// - [0x0508]: ES (buffer segment)
-///
-/// We read the requested LBA sectors from `disk_path` and write them to the
-/// guest buffer at ES:BX (= ES * 16 + BX physical address).
-fn handle_bios_disk_hypercall(
-    partition: WHV_PARTITION_HANDLE,
-    devices: &DeviceBus,
-    disk_path: &Option<String>,
-) {
-    // Read mailbox from guest RAM via host registers (we stored them in BIOS RAM)
-    // For simplicity, read from fixed GPA 0x0500 by reading guest register values
-    // that the BIOS stub saved there. We use a simpler approach: CPUID-based
-    // register passing. Since we can't directly DMA-read from another thread,
-    // we'll read the last known RAX/RBX/RCX/RDX/ES values from the IO context.
-    //
-    // The cleanest approach: read guest memory via VirtualAlloc'd host pointer.
-    // The BIOS wrote to [0x0500] in guest low RAM = host_mem + 0x500.
-    // We don't have host_mem here. Instead we use the "read registers" API.
-
-    // Read registers the BIOS saved
-    let names = [REG_RAX, REG_RCX, REG_RDX, REG_RSI, REG_RBX];
-    let mut vals = [unsafe { std::mem::zeroed::<WHV_REGISTER_VALUE>() }; 5];
-    let _ = unsafe {
-        WHvGetVirtualProcessorRegisters(
-            partition,
-            0,
-            names.as_ptr(),
-            names.len() as u32,
-            vals.as_mut_ptr(),
-        )
-    };
-
-    let sector_count = unsafe { (vals[0].Reg64 & 0xFF) as u32 };
-    let cylinder = unsafe { ((vals[1].Reg64 >> 8) & 0xFF) as u32 };
-    let sector   = unsafe { (vals[1].Reg64 & 0xFF) as u32 };
-    let head     = unsafe { ((vals[2].Reg64 >> 8) & 0xFF) as u32 };
-    let drive    = unsafe { (vals[2].Reg64 & 0xFF) as u8 };
-    let _buf_offset = unsafe { (vals[4].Reg64 & 0xFFFF) as u32 };
-
-    // CHS â LBA: LBA = (C * H + h) * S + (s - 1)
-    // For a standard 63-sector, 16-head geometry:
-    let lba = (cylinder * 16 + head) * 63 + sector.saturating_sub(1);
-    let byte_offset = lba as u64 * 512;
-
-    tracing::debug!(
-        drive, cylinder, head, sector, lba, sectors = sector_count,
-        "WHP BIOS: INT 13h disk read"
-    );
-
-    let mut status = 1u8; // 1 = error by default
-
-    if drive == 0x80 || drive == 0x00 {
-        if let Some(ref path) = disk_path {
-            if let Ok(mut f) = std::fs::File::open(path) {
-                use std::io::{Read, Seek, SeekFrom};
-                if f.seek(SeekFrom::Start(byte_offset)).is_ok() {
-                    let read_size = sector_count as usize * 512;
-                    let mut buf = vec![0u8; read_size];
-                    if f.read_exact(&mut buf).is_ok() {
-                        // Write sector data to guest memory via WHvMapGpaRange host pointer
-                        // The BIOS wants to load at 0x0000:0x7C00 (always for MBR)
-                        // Since we have host_mem we'd copy there, but we don't here.
-                        // Compromise: inject into UART as a debug message for now.
-                        // TODO: pass host_mem pointer through devices or a shared struct.
-                        tracing::debug!(bytes = buf.len(), "WHP BIOS: disk read OK");
-                        status = 0;
-                    }
-                }
-            }
-        }
-    }
-
-    *devices.disk_status.lock().unwrap() = status;
 }
 
 // âââ CPUID emulation âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
