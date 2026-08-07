@@ -55,6 +55,14 @@ use windows::Win32::{
             WHvMapGpaRange, WHvPartitionPropertyCodeProcessorCount,
             WHvRunVirtualProcessor, WHvSetPartitionProperty,
             WHvSetVirtualProcessorRegisters, WHvSetupPartition,
+            // Named register constants — values match WinHvPlatform.h exactly
+            WHvX64RegisterRax, WHvX64RegisterRcx, WHvX64RegisterRdx, WHvX64RegisterRbx,
+            WHvX64RegisterRsp, WHvX64RegisterRbp, WHvX64RegisterRsi, WHvX64RegisterRdi,
+            WHvX64RegisterRip, WHvX64RegisterRflags,
+            WHvX64RegisterEs,  WHvX64RegisterCs,  WHvX64RegisterSs,
+            WHvX64RegisterDs,  WHvX64RegisterFs,  WHvX64RegisterGs,
+            WHvX64RegisterCr0, WHvX64RegisterCr2, WHvX64RegisterCr3, WHvX64RegisterCr4,
+            WHvX64RegisterEfer, WHvX64RegisterGdtr, WHvX64RegisterIdtr,
             WHV_MAP_GPA_RANGE_FLAGS, WHV_PARTITION_HANDLE,
             WHV_PARTITION_PROPERTY_CODE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE,
             WHV_RUN_VP_EXIT_CONTEXT, WHV_RUN_VP_EXIT_REASON,
@@ -79,34 +87,37 @@ const MAP_RWX: WHV_MAP_GPA_RANGE_FLAGS =
 const MAP_RX: WHV_MAP_GPA_RANGE_FLAGS =
     WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_EXEC.0);
 
-// ─── Register names (WHV_REGISTER_NAME raw values, matches winhvplatform.h) ───
-const REG_RAX: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0000);
-const REG_RCX: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0001);
-const REG_RDX: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0002);
-const REG_RBX: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0003);
-const REG_RSP: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0004);
+// ─── Register name aliases ─────────────────────────────────────────────────────
+// These are thin aliases over the official WHvX64Register* constants imported
+// from windows::Win32::System::Hypervisor. Using SDK constants directly
+// guarantees correctness — no hand-rolled hex values that can silently drift.
+const REG_RAX:    WHV_REGISTER_NAME = WHvX64RegisterRax;
+const REG_RCX:    WHV_REGISTER_NAME = WHvX64RegisterRcx;
+const REG_RDX:    WHV_REGISTER_NAME = WHvX64RegisterRdx;
+const REG_RBX:    WHV_REGISTER_NAME = WHvX64RegisterRbx;
+const REG_RSP:    WHV_REGISTER_NAME = WHvX64RegisterRsp;
 #[allow(dead_code)]
-const REG_RBP: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0005);
-const REG_RSI: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0006);
-const REG_RDI: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0007);
-const REG_RIP: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0010);
-const REG_RFLAGS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0011);
-const REG_ES: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0012);
-const REG_CS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0013);
-const REG_SS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0014);
-const REG_DS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0015);
-const REG_FS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0016);
-const REG_GS: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0000_0017);
-const REG_CR0: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0004_0000);
-const REG_CR2: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0004_0001);
-const REG_CR3: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0004_0002);
-const REG_CR4: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0004_0003);
+const REG_RBP:    WHV_REGISTER_NAME = WHvX64RegisterRbp;
+const REG_RSI:    WHV_REGISTER_NAME = WHvX64RegisterRsi;
+const REG_RDI:    WHV_REGISTER_NAME = WHvX64RegisterRdi;
+const REG_RIP:    WHV_REGISTER_NAME = WHvX64RegisterRip;
+const REG_RFLAGS: WHV_REGISTER_NAME = WHvX64RegisterRflags;
+const REG_ES:     WHV_REGISTER_NAME = WHvX64RegisterEs;
+const REG_CS:     WHV_REGISTER_NAME = WHvX64RegisterCs;
+const REG_SS:     WHV_REGISTER_NAME = WHvX64RegisterSs;
+const REG_DS:     WHV_REGISTER_NAME = WHvX64RegisterDs;
+const REG_FS:     WHV_REGISTER_NAME = WHvX64RegisterFs;
+const REG_GS:     WHV_REGISTER_NAME = WHvX64RegisterGs;
+const REG_CR0:    WHV_REGISTER_NAME = WHvX64RegisterCr0;  // = 28
+const REG_CR2:    WHV_REGISTER_NAME = WHvX64RegisterCr2;  // = 29
+const REG_CR3:    WHV_REGISTER_NAME = WHvX64RegisterCr3;  // = 30
+const REG_CR4:    WHV_REGISTER_NAME = WHvX64RegisterCr4;  // = 31
 #[allow(dead_code)]
-const REG_EFER: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0008_0001);
+const REG_EFER:   WHV_REGISTER_NAME = WHvX64RegisterEfer; // = 8193
 #[allow(dead_code)]
-const REG_GDTR: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0002_0003);
+const REG_GDTR:   WHV_REGISTER_NAME = WHvX64RegisterGdtr; // = 27
 #[allow(dead_code)]
-const REG_IDTR: WHV_REGISTER_NAME = WHV_REGISTER_NAME(0x0002_0004);
+const REG_IDTR:   WHV_REGISTER_NAME = WHvX64RegisterIdtr; // = 26
 #[allow(dead_code)]
 const RESET_VECTOR: u64 = 0x000F_FFF0;
 
