@@ -283,8 +283,10 @@ struct WhpVm {
     devices: Arc<DeviceBus>,
     /// Optional path to a disk image (.img / .iso) used for BIOS INT 13h reads.
     disk_path: Option<String>,
-    /// Framebuffer output callback — called at ~30fps with rendered RGBA pixels.
-    framebuffer_cb: Option<FramebufferCallback>,
+    /// Framebuffer output callback -- called at ~30fps with rendered RGBA pixels.
+    framebuffer_cb: Arc<Mutex<Option<FramebufferCallback>>>,
+    /// Latest rendered RGBA display frame.
+    latest_frame: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
 }
 
 impl std::fmt::Debug for WhpVm {
@@ -304,7 +306,7 @@ unsafe impl Sync for WhpVm {}
 
 impl Drop for WhpVm {
     fn drop(&mut self) {
-        // Best-effort cleanup — errors are logged, not propagated.
+        // Best-effort cleanup -- errors are logged, not propagated.
         unsafe {
             let _ = WHvDeletePartition(self.partition);
         }
@@ -357,11 +359,21 @@ impl WhpBackend {
     /// Attach a framebuffer callback to a VM.
     ///
     /// The callback is invoked by the framebuffer scanner thread at ~30fps
-    /// with `(width, height, rgba_bytes)`. Must be called before `start_vm`.
+    /// with `(width, height, rgba_bytes)`.
     pub fn set_framebuffer_callback(&self, id: &Uuid, cb: FramebufferCallback) {
         if let Some(vm_arc) = self.get_vm(id) {
-            vm_arc.lock().unwrap().framebuffer_cb = Some(cb);
+            let vm = vm_arc.lock().unwrap();
+            *vm.framebuffer_cb.lock().unwrap() = Some(cb);
         }
+    }
+
+    /// Get the latest rendered RGBA frame for a VM.
+    pub fn get_framebuffer_frame(&self, id: &Uuid) -> Option<(u32, u32, Vec<u8>)> {
+        if let Some(vm_arc) = self.get_vm(id) {
+            let vm = vm_arc.lock().unwrap();
+            return vm.latest_frame.lock().unwrap().clone();
+        }
+        None
     }
 }
 
@@ -460,26 +472,26 @@ impl HypervisorBackend for WhpBackend {
         // (The actual disk read is done lazily by the I/O port hypercall handler)
 
         // --- 8. Map guest physical memory into partition ---
-        // Low RAM: 0x00000 – 0x9FFFF (R/W/X)
+        // Low RAM: 0x00000 -- 0x9FFFF (R/W/X)
         unsafe {
             WHvMapGpaRange(partition, low_hva as *const c_void, RAM_LOW_BASE, RAM_LOW_SIZE, MAP_RWX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map low RAM: {e}")))?;
 
-        // VGA framebuffer: 0xA0000 – 0xBFFFF (R/W — no execute)
+        // VGA framebuffer: 0xA0000 -- 0xBFFFF (R/W -- no execute)
         let vga_flags = WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_WRITE.0);
         unsafe {
             WHvMapGpaRange(partition, vga_hva as *const c_void, VGA_FB_BASE, VGA_FB_SIZE, vga_flags)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map VGA RAM: {e}")))?;
 
-        // BIOS ROM: 0xF0000 – 0xFFFFF (R/X)
+        // BIOS ROM: 0xF0000 -- 0xFFFFF (R/X)
         unsafe {
             WHvMapGpaRange(partition, bios_hva as *const c_void, BIOS_ROM_BASE, BIOS_ROM_SIZE, MAP_RX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map BIOS ROM: {e}")))?;
 
-        // High RAM: 0x100000 – end (R/W/X)
+        // High RAM: 0x100000 -- end (R/W/X)
         unsafe {
             WHvMapGpaRange(
                 partition,
@@ -507,7 +519,8 @@ impl HypervisorBackend for WhpBackend {
             vcpu_threads: Vec::new(),
             devices,
             disk_path: req.disk_path.or(req.iso_path),
-            framebuffer_cb: None,
+            framebuffer_cb: Arc::new(Mutex::new(None)),
+            latest_frame: Arc::new(Mutex::new(None)),
         };
 
         self.vms.lock().unwrap().insert(vm_id, Arc::new(Mutex::new(vm)));
@@ -541,21 +554,20 @@ impl HypervisorBackend for WhpBackend {
         write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib);
 
         // --- Framebuffer scanner thread ---
-        // Reads VGA text mode RAM from host memory at offset 0xB8000 every ~33ms,
-        // renders it to RGBA via VgaDevice, and fires the callback.
-        if let Some(cb) = vm.framebuffer_cb.clone() {
-            let fb_stop = Arc::clone(&vm.stop_flag);
-            // SAFETY: guest_ram_hva is valid for the lifetime of the WhpVm
-            // (VirtualAlloc'd and freed in Drop). The scanner only reads — never writes.
-            let hva = vm.guest_ram_hva as usize; // convert to usize to cross thread boundary
-            let devices_fb = Arc::clone(&vm.devices);
-            thread::Builder::new()
-                .name(format!("nova-fb-{}", &handle.id.to_string()[..8]))
-                .spawn(move || {
-                    framebuffer_scanner(hva, fb_stop, devices_fb, cb);
-                })
-                .map_err(|e| HypervisorError::StartFailed(format!("spawn fb thread: {e}")))?;
-        }
+        // Always spawns when VM starts: reads VGA text mode RAM at offset 0xB8000 every ~33ms,
+        // renders it to RGBA via VgaDevice, updates latest_frame, and fires callback if set.
+        let fb_stop = Arc::clone(&vm.stop_flag);
+        let hva = vm.guest_ram_hva as usize;
+        let devices_fb = Arc::clone(&vm.devices);
+        let cb_store = Arc::clone(&vm.framebuffer_cb);
+        let latest_store = Arc::clone(&vm.latest_frame);
+
+        thread::Builder::new()
+            .name(format!("nova-fb-{}", &handle.id.to_string()[..8]))
+            .spawn(move || {
+                framebuffer_scanner(hva, fb_stop, devices_fb, cb_store, latest_store);
+            })
+            .map_err(|e| HypervisorError::StartFailed(format!("spawn fb thread: {e}")))?;
 
         // --- vCPU execution thread ---
         let name = handle.name.clone();
@@ -751,23 +763,27 @@ fn framebuffer_scanner(
     hva: usize,
     stop_flag: Arc<AtomicBool>,
     devices: Arc<DeviceBus>,
-    cb: FramebufferCallback,
+    cb_store: Arc<Mutex<Option<FramebufferCallback>>>,
+    latest_store: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
 ) {
     use crate::device::vga::VGA_TEXT_FB_SIZE;
     const VGA_TEXT_OFFSET: usize = 0xB8000;
-    let mut seq: u64 = 0;
     while !stop_flag.load(Ordering::Relaxed) {
         let text_slice: &[u8] = unsafe {
             std::slice::from_raw_parts((hva + VGA_TEXT_OFFSET) as *const u8, VGA_TEXT_FB_SIZE)
         };
-        {
+        let (w, h, rgba) = {
             let mut vga = devices.vga.lock().unwrap();
             vga.sync_from_guest_ram(text_slice);
-            let (w, h, rgba) = vga.render_to_rgba();
-            drop(vga);
+            vga.render_to_rgba()
+        };
+
+        *latest_store.lock().unwrap() = Some((w, h, rgba.clone()));
+
+        if let Some(ref cb) = *cb_store.lock().unwrap() {
             cb(w, h, rgba);
         }
-        seq = seq.wrapping_add(1);
+
         thread::sleep(std::time::Duration::from_millis(33));
     }
 }

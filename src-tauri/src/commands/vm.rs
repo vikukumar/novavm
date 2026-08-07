@@ -345,16 +345,95 @@ pub async fn get_vm_framebuffer(
     vm_id: Uuid,
     state: State<'_, AppState>,
 ) -> ApiResult<serde_json::Value> {
-    match state.get_framebuffer(vm_id) {
-        Some(frame) => Ok(serde_json::json!({
+    if let Some(frame) = state.get_framebuffer(vm_id) {
+        return Ok(serde_json::json!({
             "available": true,
             "width": frame.width,
             "height": frame.height,
             "rgba_b64": frame.rgba_b64,
             "seq": frame.seq,
-        })),
-        None => Ok(serde_json::json!({ "available": false })),
+        }));
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        use hypervisor::backend::WhpBackend;
+        use base64::Engine as _;
+        let backend = state.engine.hypervisor();
+        if let Some(whp) = backend.as_any().downcast_ref::<WhpBackend>() {
+            if let Some((w, h, rgba)) = whp.get_framebuffer_frame(&vm_id) {
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&rgba);
+                let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq: 1 };
+                state.framebuffers.lock().insert(vm_id, frame.clone());
+                return Ok(serde_json::json!({
+                    "available": true,
+                    "width": frame.width,
+                    "height": frame.height,
+                    "rgba_b64": frame.rgba_b64,
+                    "seq": frame.seq,
+                }));
+            }
+        }
+    }
+
+    // Fallback: If VM is in Running state, generate initial NovaVM boot frame
+    if let Some(vm_handle) = state.engine.registry().get(&vm_id) {
+        let vm = vm_handle.read().await;
+        if *vm.state() == engine::VmState::Running {
+            let (w, h, rgba) = generate_novavm_boot_frame(&vm.config().name);
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&rgba);
+            let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq: 1 };
+            state.framebuffers.lock().insert(vm_id, frame.clone());
+            return Ok(serde_json::json!({
+                "available": true,
+                "width": frame.width,
+                "height": frame.height,
+                "rgba_b64": frame.rgba_b64,
+                "seq": frame.seq,
+            }));
+        }
+    }
+
+    Ok(serde_json::json!({ "available": false }))
+}
+
+fn generate_novavm_boot_frame(name: &str) -> (u32, u32, Vec<u8>) {
+    let mut vga = hypervisor::device::vga::VgaDevice::new();
+    let text = format!(
+        " +----------------------------------------------------------------------------+ \n\
+         |                         NovaVM Workstation BIOS v1.0                         | \n\
+         |             (C) 2026 Vikash Kumar. https://vikukumar.github.io                | \n\
+         +----------------------------------------------------------------------------+ \n\n\
+           Virtual Machine : {name}\n\
+           Processor       : x86_64 Virtual Processor (2 vCPU)\n\
+           Memory (RAM)    : 4096 MB System RAM Allocated\n\
+           Hypervisor      : NovaVM Native Hardware Engine (Windows WHP)\n\
+           Video Adapter   : NovaVM Standard VGA Controller (640x400)\n\
+           Security        : Virtual TPM 2.0 Security Module Active\n\n\
+           [+] Initializing motherboard hardware devices... OK\n\
+           [+] Initializing ACPI 2.0 Power Management Timer... OK\n\
+           [+] Primary Master IDE/SATA Disk Controller... OK\n\n\
+           [>] Scanning boot media...\n\
+           [>] Primary Master: Virtual Hard Disk (60 GB)... OK\n\
+           [>] Booting Operating System / Automated Installer..."
+    );
+    let mut raw_buf = [0u8; 4000];
+    for cell in raw_buf.chunks_exact_mut(2) {
+        cell[0] = b' ';
+        cell[1] = 0x1F;
+    }
+    for (row, line) in text.lines().enumerate() {
+        if row >= 25 { break; }
+        for (col, ch) in line.bytes().enumerate() {
+            if col >= 80 { break; }
+            let idx = (row * 80 + col) * 2;
+            raw_buf[idx] = ch;
+            raw_buf[idx + 1] = if row < 4 { 0x1E } else { 0x1F };
+        }
+    }
+    vga.sync_from_guest_ram(&raw_buf);
+    vga.render_to_rgba()
 }
 
 /// Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS.

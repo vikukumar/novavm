@@ -22,47 +22,58 @@ interface VmConsoleDisplayProps {
 
 function VmCanvas({ vmId, active }: { vmId: string; active: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const rafRef    = useRef<number>(0)
-  const lastSeq   = useRef<number>(-1)
-
-  const fetchFrame = useCallback(async () => {
-    if (!active) return
-    try {
-      const raw = await vmApi.getFramebuffer(vmId) as {
-        available: boolean
-        width?: number
-        height?: number
-        rgba_b64?: string
-        seq?: number
-      }
-
-      if (raw.available && raw.rgba_b64 && raw.width && raw.height) {
-        if (raw.seq === lastSeq.current) return // identical frame — skip draw
-        lastSeq.current = raw.seq ?? -1
-
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-
-        // Decode base64 → Uint8ClampedArray
-        const binary = atob(raw.rgba_b64)
-        const bytes  = new Uint8ClampedArray(binary.length)
-        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-
-        canvas.width  = raw.width
-        canvas.height = raw.height
-        ctx.putImageData(new ImageData(bytes, raw.width, raw.height), 0, 0)
-      }
-    } catch { /* ignore poll errors */ }
-
-    rafRef.current = window.setTimeout(fetchFrame, 33) // ~30fps
-  }, [vmId, active])
+  const timerRef  = useRef<number>(0)
+  const lastSeq   = useRef<number>(-999)
 
   useEffect(() => {
-    if (active) fetchFrame()
-    return () => { clearTimeout(rafRef.current) }
-  }, [active, fetchFrame])
+    if (!active) return
+
+    let isMounted = true
+
+    const loop = async () => {
+      if (!isMounted) return
+      try {
+        const raw = await vmApi.getFramebuffer(vmId) as {
+          available: boolean
+          width?: number
+          height?: number
+          rgba_b64?: string
+          seq?: number
+        }
+
+        if (isMounted && raw.available && raw.rgba_b64 && raw.width && raw.height) {
+          const currentSeq = raw.seq ?? 0
+          if (currentSeq !== lastSeq.current || lastSeq.current === -999) {
+            lastSeq.current = currentSeq
+            const canvas = canvasRef.current
+            if (canvas) {
+              const ctx = canvas.getContext('2d')
+              if (ctx) {
+                const binary = atob(raw.rgba_b64)
+                const bytes  = new Uint8ClampedArray(binary.length)
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+                if (canvas.width !== raw.width) canvas.width = raw.width
+                if (canvas.height !== raw.height) canvas.height = raw.height
+                ctx.putImageData(new ImageData(bytes, raw.width, raw.height), 0, 0)
+              }
+            }
+          }
+        }
+      } catch { /* ignore poll errors */ }
+
+      if (isMounted) {
+        timerRef.current = window.setTimeout(loop, 33)
+      }
+    }
+
+    loop()
+
+    return () => {
+      isMounted = false
+      clearTimeout(timerRef.current)
+    }
+  }, [vmId, active])
 
   return (
     <div className="relative w-full flex items-center justify-center bg-black rounded-xl overflow-hidden"
