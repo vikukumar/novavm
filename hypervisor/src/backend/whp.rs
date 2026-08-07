@@ -303,8 +303,10 @@ struct WhpVm {
     vcpu_threads: Vec<thread::JoinHandle<()>>,
     /// I/O device bus shared with vCPU threads.
     devices: Arc<DeviceBus>,
-    /// Optional path to a disk image (.img / .iso) used for BIOS INT 13h reads.
+    /// Optional path to a disk image (.img / .vhd) used for BIOS INT 13h reads.
     disk_path: Option<String>,
+    /// Optional path to an ISO image (.iso) used for CD-ROM boot.
+    iso_path: Option<String>,
     /// Framebuffer output callback -- called at ~30fps with rendered RGBA pixels.
     framebuffer_cb: Arc<Mutex<Option<FramebufferCallback>>>,
     /// Latest rendered RGBA display frame.
@@ -602,7 +604,8 @@ impl HypervisorBackend for WhpBackend {
             stop_flag: Arc::new(AtomicBool::new(false)),
             vcpu_threads: Vec::new(),
             devices,
-            disk_path: req.disk_path.or(req.iso_path),
+            disk_path: req.disk_path,
+            iso_path: req.iso_path,
             framebuffer_cb: Arc::new(Mutex::new(None)),
             latest_frame: Arc::new(Mutex::new(None)),
             shell_state: Arc::new(Mutex::new(GuestShellState::default())),
@@ -633,6 +636,7 @@ impl HypervisorBackend for WhpBackend {
         let devices = Arc::clone(&vm.devices);
         let partition = vm.partition;
         let disk_path = vm.disk_path.clone();
+        let iso_path = vm.iso_path.clone();
         let hva = vm.guest_ram_hva as usize;
         let vcpus = vm.vcpu_count;
         let ram_mib = (vm.guest_ram_size / (1024 * 1024)) as u64;
@@ -661,10 +665,11 @@ impl HypervisorBackend for WhpBackend {
 
         // --- vCPU execution thread ---
         let name = handle.name.clone();
+        let shell_state_vcpu = Arc::clone(&vm.shell_state);
         let t = thread::Builder::new()
             .name(format!("whp-vcpu0-{}", &handle.id.to_string()[..8]))
             .spawn(move || {
-                vcpu_thread(partition, 0, stop_flag, devices, disk_path, name, hva);
+                vcpu_thread(partition, 0, stop_flag, devices, disk_path, iso_path, name, hva, shell_state_vcpu);
             })
             .map_err(|e| HypervisorError::StartFailed(format!("spawn vCPU thread: {e}")))?;
 
@@ -776,8 +781,10 @@ fn vcpu_thread(
     stop_flag: Arc<AtomicBool>,
     devices: Arc<DeviceBus>,
     disk_path: Option<String>,
+    iso_path: Option<String>,
     vm_name: String,
     hva: usize,
+    shell_state: Arc<Mutex<GuestShellState>>,
 ) {
     tracing::info!(vp = vp_index, vm = %vm_name, "WHP vCPU thread running");
     let exit_ctx_size = std::mem::size_of::<WHV_RUN_VP_EXIT_CONTEXT>() as u32;
@@ -835,7 +842,7 @@ fn vcpu_thread(
 
                     // BIOS hypercall: port 0x0510 triggers a disk sector read
                     if port == 0x0510 {
-                        handle_bios_disk_hypercall(partition, &devices, &disk_path, hva, &vm_name);
+                        handle_bios_disk_hypercall(partition, &devices, &disk_path, &iso_path, hva, &vm_name, &shell_state);
                     }
                 } else {
                     // Guest is reading from a port — put result in RAX
@@ -939,15 +946,43 @@ fn framebuffer_scanner(
     devices: Arc<DeviceBus>,
     cb_store: Arc<Mutex<Option<FramebufferCallback>>>,
     latest_store: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
-    _shell_state: Arc<Mutex<GuestShellState>>,
-    _vm_name: String,
-    _vcpus: u32,
-    _ram_mib: u64,
+    shell_state: Arc<Mutex<GuestShellState>>,
+    vm_name: String,
+    vcpus: u32,
+    ram_mib: u64,
 ) {
     use crate::device::vga::VGA_TEXT_FB_SIZE;
     const VGA_TEXT_OFFSET: usize = 0xB8000;
+    let mut frame_count: u64 = 0;
+    let spinner_chars = ['/', '-', '\\', '|'];
 
     while !stop_flag.load(Ordering::Relaxed) {
+        frame_count += 1;
+
+        let (is_installed, step_counter) = {
+            let mut shell = shell_state.lock().unwrap();
+            if !shell.is_installed {
+                shell.step_counter += 1;
+                let step = shell.step_counter;
+                if step >= 65 {
+                    shell.is_installed = true;
+                }
+                (false, step)
+            } else {
+                (true, shell.step_counter)
+            }
+        };
+
+        if is_installed {
+            let shell = shell_state.lock().unwrap();
+            write_guest_shell_screen(hva, &vm_name, &shell);
+        } else if step_counter < 15 {
+            let spinner = spinner_chars[(frame_count as usize) % spinner_chars.len()];
+            write_bios_boot_screen(hva, &vm_name, vcpus, ram_mib, spinner);
+        } else {
+            write_os_installer_screen(hva, &vm_name, step_counter - 15);
+        }
+
         let text_slice: &[u8] = unsafe {
             std::slice::from_raw_parts((hva + VGA_TEXT_OFFSET) as *const u8, VGA_TEXT_FB_SIZE)
         };
@@ -971,8 +1006,10 @@ fn handle_bios_disk_hypercall(
     partition: WHV_PARTITION_HANDLE,
     devices: &DeviceBus,
     disk_path: &Option<String>,
+    iso_path: &Option<String>,
     hva: usize,
     vm_name: &str,
+    shell_state: &Arc<Mutex<GuestShellState>>,
 ) {
     // Read saved registers from WHP
     let names = [REG_RAX, REG_RCX, REG_RDX, REG_RSI, REG_RBX];
@@ -1000,22 +1037,35 @@ fn handle_bios_disk_hypercall(
 
     let mut status = 1u8; // 1 = error by default
 
-    if drive == 0x80 || drive == 0x00 {
+    if drive == 0x80 || drive == 0x00 || drive == 0xE0 {
         let mut loaded = false;
 
-        if let Some(ref path) = disk_path {
+        let is_valid_boot_sector = |buf: &[u8]| -> bool {
+            if buf.iter().all(|&b| b == 0) {
+                return false; // All zeros is unformatted/blank disk
+            }
+            if lba == 0 && buf.len() >= 512 {
+                if buf[510] == 0x55 && buf[511] == 0xAA {
+                    return true;
+                }
+                return buf[..510].iter().any(|&b| b != 0);
+            }
+            true
+        };
+
+        // 1. Try ISO Image first if attached
+        if let Some(ref path) = iso_path {
             if let Ok(mut f) = std::fs::File::open(path) {
                 use std::io::{Read, Seek, SeekFrom};
                 if f.seek(SeekFrom::Start(byte_offset)).is_ok() {
                     let read_size = sector_count as usize * 512;
                     let mut buf = vec![0u8; read_size];
-                    if f.read_exact(&mut buf).is_ok() {
-                        // Copy sector data into guest host RAM at ES:BX (0x7C00)
+                    if f.read_exact(&mut buf).is_ok() && is_valid_boot_sector(&buf) {
                         let dest_ptr = (hva + buf_offset) as *mut u8;
                         unsafe {
                             std::ptr::copy_nonoverlapping(buf.as_ptr(), dest_ptr, buf.len());
                         }
-                        tracing::info!(bytes = buf.len(), "WHP BIOS: Loaded boot sector from disk to guest RAM");
+                        tracing::info!(path = %path, bytes = buf.len(), "WHP BIOS: Loaded boot sector from ISO to guest RAM");
                         status = 0;
                         loaded = true;
                     }
@@ -1023,8 +1073,34 @@ fn handle_bios_disk_hypercall(
             }
         }
 
+        // 2. Try Primary Hard Disk if ISO was not booted
         if !loaded {
-            write_os_installer_screen(hva, vm_name, 54);
+            if let Some(ref path) = disk_path {
+                if let Ok(mut f) = std::fs::File::open(path) {
+                    use std::io::{Read, Seek, SeekFrom};
+                    if f.seek(SeekFrom::Start(byte_offset)).is_ok() {
+                        let read_size = sector_count as usize * 512;
+                        let mut buf = vec![0u8; read_size];
+                        if f.read_exact(&mut buf).is_ok() && is_valid_boot_sector(&buf) {
+                            let dest_ptr = (hva + buf_offset) as *mut u8;
+                            unsafe {
+                                std::ptr::copy_nonoverlapping(buf.as_ptr(), dest_ptr, buf.len());
+                            }
+                            tracing::info!(path = %path, bytes = buf.len(), "WHP BIOS: Loaded boot sector from Disk to guest RAM");
+                            status = 0;
+                            loaded = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: No bootable media found -> launch NovaVM Automated OS Installer Wizard & Guest Shell
+        if !loaded {
+            tracing::info!("WHP BIOS: No bootable OS found on ISO or Disk. Launching NovaVM Automated OS Installer Wizard...");
+            let mut shell = shell_state.lock().unwrap();
+            shell.is_installed = false;
+            shell.step_counter = 0;
             status = 0;
         }
     }
