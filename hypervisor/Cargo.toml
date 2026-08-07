@@ -22,6 +22,8 @@ windows = { version = "0.58", features = [
     "Win32_System_Hypervisor",
     "Win32_System_SystemInformation",
     "Win32_System_Memory",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

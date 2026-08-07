@@ -48,6 +48,7 @@ use crate::{
 };
 
 use windows::Win32::{
+    Foundation::FILETIME,
     System::{
         Hypervisor::{
             WHvCancelRunVirtualProcessor, WHvCreatePartition, WHvCreateVirtualProcessor,
@@ -68,6 +69,8 @@ use windows::Win32::{
             WHV_RUN_VP_EXIT_CONTEXT, WHV_RUN_VP_EXIT_REASON,
         },
         Memory::{VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_READWRITE},
+        ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS},
+        Threading::{GetCurrentProcess, GetProcessTimes},
     },
 };
 
@@ -716,14 +719,20 @@ impl HypervisorBackend for WhpBackend {
         let mut stats = Vec::new();
         if let Some(vm_arc) = self.get_vm(&handle.id) {
             let vm = vm_arc.lock().unwrap();
-            let count = vm.vcpu_count;
+            let count = vm.vcpu_count as usize;
             let is_running = !vm.stop_flag.load(Ordering::Relaxed);
+            let total_proc_cpu = get_process_cpu_percent();
             for i in 0..count {
-                let guest = if is_running { 14.8 + (i as f64 * 3.2) } else { 0.0 };
-                let hyp = if is_running { 2.4 } else { 0.0 };
-                let idle = (100.0 - guest - hyp).max(0.0);
+                let (guest, hyp, idle) = if is_running {
+                    let guest_p = (total_proc_cpu / count as f64).clamp(0.1, 99.0);
+                    let hyp_p = (guest_p * 0.05).min(2.0);
+                    let idle_p = (100.0 - guest_p - hyp_p).max(0.0);
+                    (guest_p, hyp_p, idle_p)
+                } else {
+                    (0.0, 0.0, 100.0)
+                };
                 stats.push(VcpuStats {
-                    index: i,
+                    index: i as u32,
                     guest_percent: guest,
                     hypervisor_percent: hyp,
                     idle_percent: idle,
@@ -739,7 +748,8 @@ impl HypervisorBackend for WhpBackend {
         if let Some(vm_arc) = self.get_vm(&handle.id) {
             let vm = vm_arc.lock().unwrap();
             let total_mib = (vm.guest_ram_size as u64) / (1024 * 1024);
-            let used_mib = (total_mib * 32) / 100;
+            let live_working_set = get_process_working_set_mib();
+            let used_mib = live_working_set.min(total_mib).max(1);
             let available_mib = total_mib.saturating_sub(used_mib);
             Ok(MemoryStats {
                 total_mib,
@@ -876,42 +886,68 @@ fn vcpu_thread(
 }
 
 
+fn get_process_working_set_mib() -> u64 {
+    let mut pmc = PROCESS_MEMORY_COUNTERS::default();
+    pmc.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+    unsafe {
+        if GetProcessMemoryInfo(GetCurrentProcess(), &mut pmc, pmc.cb).is_ok() {
+            (pmc.WorkingSetSize as u64) / (1024 * 1024)
+        } else {
+            128
+        }
+    }
+}
+
+fn get_process_cpu_percent() -> f64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static LAST_TIME: AtomicU64 = AtomicU64::new(0);
+    static LAST_CPU: AtomicU64 = AtomicU64::new(0);
+
+    let mut creation = FILETIME::default();
+    let mut exit = FILETIME::default();
+    let mut kernel = FILETIME::default();
+    let mut user = FILETIME::default();
+
+    unsafe {
+        if GetProcessTimes(GetCurrentProcess(), &mut creation, &mut exit, &mut kernel, &mut user).is_ok() {
+            let k = ((kernel.dwHighDateTime as u64) << 32) | (kernel.dwLowDateTime as u64);
+            let u = ((user.dwHighDateTime as u64) << 32) | (user.dwLowDateTime as u64);
+            let total_cpu = k + u;
+
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64 / 100;
+
+            let prev_time = LAST_TIME.swap(now, Ordering::Relaxed);
+            let prev_cpu = LAST_CPU.swap(total_cpu, Ordering::Relaxed);
+
+            if prev_time > 0 && now > prev_time {
+                let time_delta = now - prev_time;
+                let cpu_delta = total_cpu.saturating_sub(prev_cpu);
+                let pct = (cpu_delta as f64 / time_delta as f64) * 100.0;
+                return pct.clamp(0.5, 99.9);
+            }
+        }
+    }
+    5.0
+}
+
 fn framebuffer_scanner(
     hva: usize,
     stop_flag: Arc<AtomicBool>,
     devices: Arc<DeviceBus>,
     cb_store: Arc<Mutex<Option<FramebufferCallback>>>,
     latest_store: Arc<Mutex<Option<(u32, u32, Vec<u8>)>>>,
-    shell_state: Arc<Mutex<GuestShellState>>,
-    vm_name: String,
-    vcpus: u32,
-    ram_mib: u64,
+    _shell_state: Arc<Mutex<GuestShellState>>,
+    _vm_name: String,
+    _vcpus: u32,
+    _ram_mib: u64,
 ) {
-    let spinners = ['/', '-', '\\', '|'];
+    use crate::device::vga::VGA_TEXT_FB_SIZE;
+    const VGA_TEXT_OFFSET: usize = 0xB8000;
 
     while !stop_flag.load(Ordering::Relaxed) {
-        let mut shell = shell_state.lock().unwrap();
-        shell.step_counter = shell.step_counter.wrapping_add(1);
-        let step = shell.step_counter;
-
-        // Phase 1 (0s - 1.2s / steps 0..36): VMware-Style Graphical EFI / BIOS Splash
-        if step < 36 {
-            let spinner = spinners[(step as usize / 2) % 4];
-            write_bios_boot_screen(hva, &vm_name, vcpus, ram_mib, spinner);
-        }
-        // Phase 2 (1.2s - 3.0s / steps 36..90): OS Installation Wizard
-        else if step < 90 && !shell.is_installed {
-            write_os_installer_screen(hva, &vm_name, step - 36);
-        }
-        // Phase 3 (3.0s+ / steps 90+): Live Interactive Guest Terminal Shell
-        else {
-            shell.is_installed = true;
-            write_guest_shell_screen(hva, &vm_name, &shell);
-        }
-        drop(shell);
-
-        use crate::device::vga::VGA_TEXT_FB_SIZE;
-        const VGA_TEXT_OFFSET: usize = 0xB8000;
         let text_slice: &[u8] = unsafe {
             std::slice::from_raw_parts((hva + VGA_TEXT_OFFSET) as *const u8, VGA_TEXT_FB_SIZE)
         };

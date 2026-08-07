@@ -36,10 +36,21 @@ fn main() {
         // ── Setup Hook ───────────────────────────────────────────────────────
         .setup(|app| {
             let state: tauri::State<AppState> = app.state();
-            // Spawn background metrics collection.
-            let metrics_owned: MetricsCollector = (*state.metrics).clone();
+            // Spawn background metrics collection for host and all active VMs.
+            let metrics_owned = state.metrics.clone();
+            let engine_owned = state.engine.clone();
             tauri::async_runtime::spawn(async move {
-                metrics_owned.run_background_collection(Duration::from_secs(1)).await;
+                let mut interval = tokio::time::interval(Duration::from_secs(1));
+                loop {
+                    interval.tick().await;
+                    metrics_owned.sample_host();
+                    for id in engine_owned.registry().ids() {
+                        metrics_owned.register_vm(id);
+                        if let Some(vm_metrics) = engine_owned.sample_vm_metrics(id).await {
+                            metrics_owned.record_vm_metrics(vm_metrics);
+                        }
+                    }
+                }
             });
 
             // Initialise default VMware Workstation style virtual networks.

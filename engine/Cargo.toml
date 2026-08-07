@@ -22,6 +22,7 @@ scheduler = { workspace = true }
 memory = { workspace = true }
 storage = { workspace = true }
 network = { workspace = true }
+monitor = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -277,6 +277,39 @@ impl Engine {
         tracing::info!(%id, "VM destroyed and removed from registry");
         Ok(())
     }
+
+    /// Query live performance metrics for a running VM.
+    pub async fn sample_vm_metrics(&self, id: Uuid) -> Option<monitor::VmMetrics> {
+        let hyp_handle = self.handles.get(&id)?.clone();
+        let cpu_stats = self.hypervisor.cpu_stats(&hyp_handle).await.ok()?;
+        let mem_stats = self.hypervisor.memory_stats(&hyp_handle).await.ok()?;
+
+        let total_cpu = if cpu_stats.is_empty() {
+            0.0
+        } else {
+            cpu_stats
+                .iter()
+                .map(|s| s.guest_percent + s.hypervisor_percent)
+                .sum::<f64>()
+                / cpu_stats.len() as f64
+        };
+
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Some(monitor::VmMetrics {
+            vm_id: id,
+            cpu_percent: total_cpu,
+            memory_used_mib: mem_stats.used_mib,
+            disk_read_bytes: 0,
+            disk_write_bytes: 0,
+            net_rx_bytes: 0,
+            net_tx_bytes: 0,
+            timestamp: ts,
+        })
+    }
 }
 
 impl Default for Engine {
