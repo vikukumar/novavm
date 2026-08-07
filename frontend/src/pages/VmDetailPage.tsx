@@ -235,16 +235,10 @@ export function VmDetailPage() {
                 label="Virtualization Engine"
                 value={
                   virtInfo
-                    ? virtInfo.engine === 'nova_native_whp'
-                      ? 'NovaVM Native (WHP)'
-                      : virtInfo.engine === 'nova_native_kvm'
+                    ? virtInfo.engine === 'nova_native_kvm'
                       ? 'NovaVM Native (KVM)'
-                      : virtInfo.engine === 'nova_qemu_accelerated'
-                      ? 'NovaVM + QEMU (HW)'
-                      : virtInfo.engine === 'nova_qemu_software'
-                      ? 'NovaVM + QEMU (SW)'
-                      : 'NovaVM Simulation'
-                    : 'NovaVM Engine'
+                      : 'NovaVM Native (WHP)'
+                    : 'NovaVM Native Engine'
                 }
               />
               <ConfigItem

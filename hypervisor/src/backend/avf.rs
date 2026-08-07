@@ -93,4 +93,9 @@ impl HypervisorBackend for AvfBackend {
     async fn memory_stats(&self, _handle: &VmHandle) -> Result<MemoryStats, HypervisorError> {
         Ok(MemoryStats::default())
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
+

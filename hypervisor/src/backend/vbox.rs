@@ -1,8 +1,8 @@
-﻿//! VirtualBox backend for NovaVM.
+//! VirtualBox backend for NovaVM.
 //!
 //! Uses `VBoxManage.exe` CLI to create, start, pause, stop and destroy real
 //! VirtualBox virtual machines. When a VM is started with [`start_vm`], VirtualBox
-//! opens its own full graphical display window — this gives the user the real
+//! opens its own full graphical display window  this gives the user the real
 //! VMware-like experience with full OS installer support.
 //!
 //! # Requirements
@@ -11,7 +11,7 @@
 //!
 //! # Disk formats
 //! VirtualBox supports VDI, VMDK, and VHD natively.
-//! QCOW2 is NOT supported by VirtualBox — a warning is logged if one is provided.
+//! QCOW2 is NOT supported by VirtualBox  a warning is logged if one is provided.
 
 use std::{
     collections::HashMap,
@@ -195,7 +195,7 @@ impl HypervisorBackend for VBoxBackend {
         })
     }
 
-    /// Start the VM — opens the real VirtualBox GUI window with full display.
+    /// Start the VM  opens the real VirtualBox GUI window with full display.
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         let vm_name = &handle.backend_token;
         tracing::info!(name = %vm_name, "VBoxBackend: starting VM (GUI mode)");
@@ -247,7 +247,12 @@ impl HypervisorBackend for VBoxBackend {
         let total_mib = out.ok().as_deref().map(parse_metric_kb).unwrap_or(0) / 1024;
         Ok(MemoryStats { total_mib, used_mib: total_mib, available_mib: 0, balloon_size_mib: 0 })
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
+
 
 fn parse_metric_percent(text: &str) -> f64 {
     for line in text.lines() {

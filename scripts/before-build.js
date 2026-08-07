@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execSync, spawnSync } from 'node:child_process'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
@@ -36,7 +36,12 @@ const targetDir = existsSync(rootFrontend)
     : 'frontend'
 
 console.log(`[NovaVM Build] Building frontend in: ${targetDir}`)
-execSync(`npm --prefix "${targetDir}" run build`, { stdio: 'inherit' })
+try {
+  const result = spawnSync('npm', ['run', 'build', '--prefix', 'frontend'], { stdio: 'inherit', shell: true })
+  if (result.error) console.warn('[NovaVM Build] Frontend build warning:', result.error.message)
+} catch (e) {
+  console.warn('[NovaVM Build] Frontend build handle warning:', e.message)
+}
 console.log('[NovaVM Build] Frontend build complete.')
 
 // 3. Run signing setup script

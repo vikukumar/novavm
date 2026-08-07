@@ -1,4 +1,4 @@
-//! Null hypervisor backend — does nothing, always succeeds.
+//! Null hypervisor backend â does nothing, always succeeds.
 //!
 //! Used in unit tests and on platforms where no native backend is available.
 
@@ -61,4 +61,9 @@ impl HypervisorBackend for NullBackend {
     async fn memory_stats(&self, _handle: &VmHandle) -> Result<MemoryStats, HypervisorError> {
         Ok(MemoryStats::default())
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
+

@@ -29,7 +29,7 @@ use crate::{
     HypervisorBackend, HypervisorCapabilities, HypervisorError,
 };
 
-/// Shared process table: maps VM handle ID → running QEMU child process.
+/// Shared process table: maps VM handle ID â running QEMU child process.
 type ProcessTable = Arc<Mutex<HashMap<Uuid, Child>>>;
 
 /// QEMU process-based hypervisor backend.
@@ -86,7 +86,7 @@ impl QemuBackend {
     fn build_args(&self, handle: &VmHandle, req: &QemuLaunchParams) -> Vec<String> {
         let mut args: Vec<String> = Vec::new();
 
-        // ─── Machine type ─────────────────────────────────────────────────────
+        // âââ Machine type âââââââââââââââââââââââââââââââââââââââââââââââââââââ
         // Use q35 (modern PCIe chipset, better device support) with WHPX acceleration
         // if available, otherwise fall back to TCG software emulation.
         args.push("-machine".into());
@@ -94,7 +94,7 @@ impl QemuBackend {
         // tcg  = software emulation (slow but always works)
         args.push("q35,accel=whpx:tcg".into());
 
-        // ─── CPU ──────────────────────────────────────────────────────────────
+        // âââ CPU ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         args.push("-cpu".into());
         args.push("host,hv_relaxed,hv_spinlocks=0x1fff,hv_vapic,hv_time".into());
         args.push("-smp".into());
@@ -103,13 +103,13 @@ impl QemuBackend {
             vcpus = req.vcpus
         ));
 
-        // ─── Memory ───────────────────────────────────────────────────────────
+        // âââ Memory âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         args.push("-m".into());
         args.push(format!("{}M", req.memory_mib));
 
-        // ─── Firmware / UEFI ──────────────────────────────────────────────────
+        // âââ Firmware / UEFI ââââââââââââââââââââââââââââââââââââââââââââââââââ
         if req.uefi {
-            // OVMF (UEFI firmware for QEMU) — try common Windows paths
+            // OVMF (UEFI firmware for QEMU) â try common Windows paths
             let ovmf_paths = [
                 r"C:\Program Files\qemu\share\edk2-x86_64-code.fd",
                 r"C:\Program Files\qemu\share\OVMF.fd",
@@ -124,7 +124,7 @@ impl QemuBackend {
             }
         }
 
-        // ─── Primary disk ─────────────────────────────────────────────────────
+        // âââ Primary disk âââââââââââââââââââââââââââââââââââââââââââââââââââââ
         if let Some(disk_path) = &req.disk_path {
             args.push("-drive".into());
             args.push(format!(
@@ -133,7 +133,7 @@ impl QemuBackend {
             ));
         }
 
-        // ─── ISO / CD-ROM ─────────────────────────────────────────────────────
+        // âââ ISO / CD-ROM âââââââââââââââââââââââââââââââââââââââââââââââââââââ
         if let Some(iso_path) = &req.iso_path {
             args.push("-drive".into());
             args.push(format!(
@@ -144,7 +144,7 @@ impl QemuBackend {
             args.push("ide-cd,drive=cdrom0,bootindex=1".into());
         }
 
-        // ─── Boot order ───────────────────────────────────────────────────────
+        // âââ Boot order âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         if req.iso_path.is_some() {
             args.push("-boot".into());
             args.push("order=dc,menu=on".into()); // d=CD-ROM first, c=disk
@@ -153,14 +153,14 @@ impl QemuBackend {
             args.push("order=c,menu=on".into()); // c=disk only
         }
 
-        // ─── Network ──────────────────────────────────────────────────────────
-        // NAT networking — simplest, always works without host bridges
+        // âââ Network ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+        // NAT networking â simplest, always works without host bridges
         args.push("-netdev".into());
         args.push("user,id=net0,hostfwd=tcp::2222-:22".into());
         args.push("-device".into());
         args.push("virtio-net-pci,netdev=net0".into());
 
-        // ─── Display ──────────────────────────────────────────────────────────
+        // âââ Display ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         // SDL gives a native window (VMware-like). VNC is fallback.
         // On Windows with QEMU for Windows, SDL is the default display type.
         args.push("-display".into());
@@ -171,7 +171,7 @@ impl QemuBackend {
         args.push("-vnc".into());
         args.push(format!("127.0.0.1:{vnc_port}"));
 
-        // ─── Hardware ─────────────────────────────────────────────────────────
+        // âââ Hardware âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         // Sound (HDA)
         args.push("-device".into());
         args.push("intel-hda".into());
@@ -188,7 +188,7 @@ impl QemuBackend {
         args.push("-device".into());
         args.push("virtio-balloon-pci".into());
 
-        // ─── Misc ─────────────────────────────────────────────────────────────
+        // âââ Misc âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
         // QEMU guest agent via virtio-serial
         args.push("-device".into());
         args.push("virtio-serial-pci".into());
@@ -373,7 +373,7 @@ impl HypervisorBackend for QemuBackend {
     async fn pause_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
         // Send 'stop' QEMU monitor command via stdin
         tracing::info!(id = %handle.id, "QEMU: pausing (sending 'stop' to monitor)");
-        // QEMU monitor over stdio — write "stop\n"
+        // QEMU monitor over stdio â write "stop\n"
         // We don't have easy async access here; the process table holds the Child.
         // Best-effort: if we can't pause at the OS level, just log it.
         // A full implementation would use a QMP (QEMU Machine Protocol) socket.
@@ -439,4 +439,9 @@ impl HypervisorBackend for QemuBackend {
             Ok(MemoryStats::default())
         }
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
+

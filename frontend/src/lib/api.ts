@@ -83,6 +83,13 @@ export const vmApi = {
   getSerialOutput: (vmId: string): Promise<string> =>
     call('get_vm_serial_output', { vmId }),
 
+  /** Get the current display framebuffer rendered by the NovaVM WHP vCPU thread.
+   *  Returns base64-encoded raw RGBA (width × height × 4 bytes).
+   *  Poll at ~30fps to drive a real VM display in the frontend canvas.
+   */
+  getFramebuffer: (vmId: string): Promise<unknown> =>
+    call('get_vm_framebuffer', { vmId }),
+
   /** Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS. */
   runScript: (
     vmId: string,

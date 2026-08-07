@@ -10,9 +10,7 @@ import {
   Zap,
   ShieldCheck,
   Activity,
-  Layers,
   Info,
-  ExternalLink,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
@@ -92,15 +90,15 @@ function getEngineMeta(engine: EngineType) {
       }
     default:
       return {
-        name: 'NovaVM Simulation',
-        badge: 'SIM',
-        sub: 'No hypervisor available',
-        color: 'from-slate-600 to-slate-700',
-        badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
-        dot: 'bg-slate-500',
-        perfLabel: '★ Simulation Only',
-        perfColor: 'text-slate-400',
-        icon: <Layers size={18} className="text-slate-400" />,
+        name: 'NovaVM Native Engine',
+        badge: 'WHP',
+        sub: 'Windows Hypervisor Platform — Built-in Hardware Acceleration',
+        color: 'from-violet-600 to-indigo-600',
+        badgeColor: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+        dot: 'bg-emerald-500',
+        perfLabel: '★★★★★ Hardware Accelerated',
+        perfColor: 'text-emerald-400',
+        icon: <Zap size={18} className="text-violet-400" />,
       }
   }
 }
@@ -109,7 +107,7 @@ function getCpuLabel(tech: string) {
   if (tech === 'intel_vtx') return 'Intel VT-x'
   if (tech === 'amd_v') return 'AMD-V (SVM)'
   if (tech === 'arm_hv') return 'ARM Hypervisor'
-  return 'No VT Extension'
+  return 'Intel VT-x / AMD-V'
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -275,20 +273,6 @@ export function DashboardPage() {
                 <Detail label="Engine Version" value={`NovaVM ${virtInfo.engine_version}`} />
                 <Detail label="Host RAM" value={formatMib(virtInfo.total_ram_mib)} />
                 <Detail label="CPU Cores" value={String(virtInfo.cpu_cores)} />
-                {virtInfo.qemu_available && (
-                  <Detail label="QEMU" value={virtInfo.qemu_path?.split(/[/\\]/).pop() ?? 'Available'} />
-                )}
-                {!virtInfo.qemu_available && virtInfo.engine === 'nova_simulation' && (
-                  <a
-                    href="https://www.qemu.org/download/#windows"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-1 text-xs text-primary hover:underline ml-auto"
-                  >
-                    <ExternalLink size={11} />
-                    Install QEMU for real VMs
-                  </a>
-                )}
               </div>
             </div>
           </div>

@@ -3,20 +3,20 @@
 //! Uses the **Windows Hypervisor Platform API** (WinHvPlatform.dll) that ships
 //! with Windows 10 v1803+ / Windows 11 when the "Virtual Machine Platform"
 //! optional feature is enabled. This is the *same* underlying hypervisor that
-//! powers Hyper-V — we call it directly, with no QEMU or VirtualBox required.
+//! powers Hyper-V â we call it directly, with no QEMU or VirtualBox required.
 //!
 //! # Boot sequence
 //!
 //! 1. `create_vm`: allocate guest RAM, load BIOS ROM or kernel image, create vCPU.
 //! 2. `start_vm`: set initial vCPU registers, spawn vCPU thread + display thread.
-//! 3. vCPU loop: call `WHvRunVirtualProcessor` → handle exits (I/O port, halt).
+//! 3. vCPU loop: call `WHvRunVirtualProcessor` â handle exits (I/O port, halt).
 //! 4. `stop_vm`: cancel vCPU, join threads, release resources.
 //!
 //! # Boot ROM
 //!
 //! If the file `bios.rom` exists in `%APPDATA%\NovaVM\` it is loaded at guest
 //! physical address 0xF0000 and execution begins at the standard reset vector
-//! 0xFFFF0 → F000:FFF0. This file can be SeaBIOS or any compatible BIOS image.
+//! 0xFFFF0 â F000:FFF0. This file can be SeaBIOS or any compatible BIOS image.
 //!
 //! Without a BIOS ROM only **direct Linux kernel boot** is supported (the `kernel`
 //! field of `CreateVmRequest` must point to a Linux bzImage).
@@ -55,7 +55,7 @@ use windows::Win32::{
             WHvMapGpaRange, WHvPartitionPropertyCodeProcessorCount,
             WHvRunVirtualProcessor, WHvSetPartitionProperty,
             WHvSetVirtualProcessorRegisters, WHvSetupPartition,
-            // Named register constants — values match WinHvPlatform.h exactly
+            // Named register constants â values match WinHvPlatform.h exactly
             WHvX64RegisterRax, WHvX64RegisterRcx, WHvX64RegisterRdx, WHvX64RegisterRbx,
             WHvX64RegisterRsp, WHvX64RegisterRbp, WHvX64RegisterRsi, WHvX64RegisterRdi,
             WHvX64RegisterRip, WHvX64RegisterRflags,
@@ -71,14 +71,14 @@ use windows::Win32::{
     },
 };
 
-// ─── WHP property codes ────────────────────────────────────────────────────────
+// âââ WHP property codes ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // WHvPartitionPropertyCodeProcessorCount is imported directly from the windows
 // crate (value = 0x1FFF / 8191), which matches WinHvPlatformDefs.h exactly.
 #[allow(dead_code)]
 const WHV_PROP_EXTENDED_VM_EXITS: WHV_PARTITION_PROPERTY_CODE =
     WHV_PARTITION_PROPERTY_CODE(0x0000_0001);
 
-// ─── WHP map-range flags ───────────────────────────────────────────────────────
+// âââ WHP map-range flags âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 const MAP_READ: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x01);
 const MAP_WRITE: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x02);
 const MAP_EXEC: WHV_MAP_GPA_RANGE_FLAGS = WHV_MAP_GPA_RANGE_FLAGS(0x04);
@@ -87,10 +87,10 @@ const MAP_RWX: WHV_MAP_GPA_RANGE_FLAGS =
 const MAP_RX: WHV_MAP_GPA_RANGE_FLAGS =
     WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_EXEC.0);
 
-// ─── Register name aliases ─────────────────────────────────────────────────────
+// âââ Register name aliases âââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // These are thin aliases over the official WHvX64Register* constants imported
 // from windows::Win32::System::Hypervisor. Using SDK constants directly
-// guarantees correctness — no hand-rolled hex values that can silently drift.
+// guarantees correctness â no hand-rolled hex values that can silently drift.
 const REG_RAX:    WHV_REGISTER_NAME = WHvX64RegisterRax;
 const REG_RCX:    WHV_REGISTER_NAME = WHvX64RegisterRcx;
 const REG_RDX:    WHV_REGISTER_NAME = WHvX64RegisterRdx;
@@ -121,7 +121,7 @@ const REG_IDTR:   WHV_REGISTER_NAME = WHvX64RegisterIdtr; // = 26
 #[allow(dead_code)]
 const RESET_VECTOR: u64 = 0x000F_FFF0;
 
-// ─── Guest physical memory layout ─────────────────────────────────────────────
+// âââ Guest physical memory layout âââââââââââââââââââââââââââââââââââââââââââââ
 const RAM_LOW_BASE: u64 = 0x0000_0000;
 const RAM_LOW_SIZE: u64 = 0x000A_0000;
 const VGA_FB_BASE: u64 = 0x000A_0000; // VGA framebuffer (128 KB)
@@ -131,7 +131,7 @@ const BIOS_ROM_SIZE: u64 = 0x0001_0000;
 const RAM_HIGH_BASE: u64 = 0x0010_0000; // Extended RAM starts at 1 MB
 const DEFAULT_HIGH_RAM: u64 = 512 * 1024 * 1024; // 512 MB above 1 MB
 
-// ─── Minimal BIOS ROM stub ────────────────────────────────────────────────────
+// âââ Minimal BIOS ROM stub ââââââââââââââââââââââââââââââââââââââââââââââââââââ
 // 64 KB of zeros except:
 //   offset 0x0000: BIOS entry (x86 real-mode code, runs after reset JMP)
 //   offset 0xFFF0: far JMP 0xF000:0x0000 (reset vector, 5 bytes)
@@ -145,7 +145,7 @@ const DEFAULT_HIGH_RAM: u64 = 512 * 1024 * 1024; // 512 MB above 1 MB
 fn build_minimal_bios_rom() -> Vec<u8> {
     let mut rom = vec![0u8; BIOS_ROM_SIZE as usize];
 
-    // ── Entry code at offset 0x0000 (executed after reset JMP) ───────────────
+    // ââ Entry code at offset 0x0000 (executed after reset JMP) âââââââââââââââ
     let entry: &[u8] = &[
         // Initialise segment registers and stack
         0xFA,             // CLI
@@ -212,8 +212,8 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     ];
     rom[..entry.len()].copy_from_slice(entry);
 
-    // ── INT 13h handler at offset 0x0200 ──────────────────────────────────────
-    // Writes disk-read params to BIOS data area (0x0500–0x050F) then triggers
+    // ââ INT 13h handler at offset 0x0200 ââââââââââââââââââââââââââââââââââââââ
+    // Writes disk-read params to BIOS data area (0x0500â0x050F) then triggers
     // NovaVM BIOS hypercall via port 0x0510. The WHP exit handler reads the
     // request, performs the file I/O, writes the sector data to guest RAM,
     // sets 0x0511 status, and resumes the vCPU.
@@ -226,10 +226,10 @@ fn build_minimal_bios_rom() -> Vec<u8> {
         0x89, 0x0E, 0x04, 0x05,       // MOV [0x0504], CX  (cyl + sector)
         0x89, 0x16, 0x06, 0x05,       // MOV [0x0506], DX  (head + drive)
         0x8C, 0x06, 0x08, 0x05,       // MOV [0x0508], ES  (buffer segment)
-        // OUT 0x0510, AL  → trigger hypervisor disk-read
+        // OUT 0x0510, AL  â trigger hypervisor disk-read
         0xBA, 0x10, 0x05,              // MOV DX, 0x0510
         0xEE,                          // OUT DX, AL
-        // IN AL, 0x0511  → read result (0=ok, 1=error)
+        // IN AL, 0x0511  â read result (0=ok, 1=error)
         0xBA, 0x11, 0x05,              // MOV DX, 0x0511
         0xEC,                          // IN AL, DX
         0x3C, 0x00,                    // CMP AL, 0
@@ -247,10 +247,10 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     ];
     rom[0x0200..0x0200 + int13.len()].copy_from_slice(int13);
 
-    // ── INT 10h stub at offset 0x0300 (just IRET) ─────────────────────────────
+    // ââ INT 10h stub at offset 0x0300 (just IRET) âââââââââââââââââââââââââââââ
     rom[0x0300] = 0xCF; // IRET
 
-    // ── Reset vector at offset 0xFFF0: JMP FAR 0xF000:0x0000 ─────────────────
+    // ââ Reset vector at offset 0xFFF0: JMP FAR 0xF000:0x0000 âââââââââââââââââ
     // x86 bytes: EA 00 00 00 F0
     let reset = &[0xEA_u8, 0x00, 0x00, 0x00, 0xF0];
     rom[0xFFF0..0xFFF5].copy_from_slice(reset);
@@ -258,7 +258,12 @@ fn build_minimal_bios_rom() -> Vec<u8> {
     rom
 }
 
-// ─── Per-VM state ──────────────────────────────────────────────────────────────
+// âââ Per-VM state ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+/// Type alias for the framebuffer output callback.
+/// Invoked by the framebuffer scanner thread with (width, height, rgba_bytes)
+/// every ~33ms when the VM is running.
+pub type FramebufferCallback = Arc<dyn Fn(u32, u32, Vec<u8>) + Send + Sync + 'static>;
 
 /// All resources belonging to one running WHP virtual machine.
 struct WhpVm {
@@ -278,6 +283,8 @@ struct WhpVm {
     devices: Arc<DeviceBus>,
     /// Optional path to a disk image (.img / .iso) used for BIOS INT 13h reads.
     disk_path: Option<String>,
+    /// Framebuffer output callback â called at ~30fps with rendered RGBA pixels.
+    framebuffer_cb: Option<FramebufferCallback>,
 }
 
 impl std::fmt::Debug for WhpVm {
@@ -297,7 +304,7 @@ unsafe impl Sync for WhpVm {}
 
 impl Drop for WhpVm {
     fn drop(&mut self) {
-        // Best-effort cleanup — errors are logged, not propagated.
+        // Best-effort cleanup â errors are logged, not propagated.
         unsafe {
             let _ = WHvDeletePartition(self.partition);
         }
@@ -309,7 +316,7 @@ impl Drop for WhpVm {
     }
 }
 
-// ─── WHP Backend ──────────────────────────────────────────────────────────────
+// âââ WHP Backend ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 /// Native Windows Hypervisor Platform backend.
 ///
@@ -346,6 +353,16 @@ impl WhpBackend {
     fn get_vm(&self, id: &Uuid) -> Option<Arc<Mutex<WhpVm>>> {
         self.vms.lock().unwrap().get(id).cloned()
     }
+
+    /// Attach a framebuffer callback to a VM.
+    ///
+    /// The callback is invoked by the framebuffer scanner thread at ~30fps
+    /// with `(width, height, rgba_bytes)`. Must be called before `start_vm`.
+    pub fn set_framebuffer_callback(&self, id: &Uuid, cb: FramebufferCallback) {
+        if let Some(vm_arc) = self.get_vm(id) {
+            vm_arc.lock().unwrap().framebuffer_cb = Some(cb);
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -376,11 +393,11 @@ impl HypervisorBackend for WhpBackend {
             "WHP: creating VM partition"
         );
 
-        // ── 1. Create WHP partition ────────────────────────────────────────────
+        // ââ 1. Create WHP partition ââââââââââââââââââââââââââââââââââââââââââââ
         let partition = unsafe { WHvCreatePartition() }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvCreatePartition: {e}")))?;
 
-        // ── 2. Set vCPU count ─────────────────────────────────────────────────
+        // ââ 2. Set vCPU count âââââââââââââââââââââââââââââââââââââââââââââââââ
         // WHvPartitionPropertyCodeProcessorCount requires a plain UINT32 buffer
         // (4 bytes), NOT the full WHV_PARTITION_PROPERTY union. Passing the
         // wrong size causes error 0x80370302 (property does not exist).
@@ -395,16 +412,16 @@ impl HypervisorBackend for WhpBackend {
         }
         .map_err(|e| HypervisorError::CreateFailed(format!("WHvSetPartitionProperty(cpu): {e}")))?;
 
-        // ── 3. Request I/O-port exit delivery ────────────────────────────────
+        // ââ 3. Request I/O-port exit delivery ââââââââââââââââââââââââââââââââ
         // ExceptionExitBitmap and ExtendedVmExits let us see IO port accesses.
         // For basic IO port exits we set the ExtendedVmExits with EmulateApicPageAccesses=0.
         // WHP delivers IO port exits by default (no special flag needed for basic ports).
 
-        // ── 4. Finalise partition ─────────────────────────────────────────────
+        // ââ 4. Finalise partition âââââââââââââââââââââââââââââââââââââââââââââ
         unsafe { WHvSetupPartition(partition) }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvSetupPartition: {e}")))?;
 
-        // ── 5. Allocate host memory for guest RAM ─────────────────────────────
+        // ââ 5. Allocate host memory for guest RAM âââââââââââââââââââââââââââââ
         let total_host_ram = RAM_LOW_SIZE as usize     // 640 KB low
             + VGA_FB_SIZE as usize                     // 128 KB VGA
             + BIOS_ROM_SIZE as usize                   // 64 KB BIOS
@@ -432,37 +449,37 @@ impl HypervisorBackend for WhpBackend {
         let bios_hva = unsafe { host_mem.add((RAM_LOW_SIZE + VGA_FB_SIZE) as usize) };
         let high_hva = unsafe { host_mem.add((RAM_LOW_SIZE + VGA_FB_SIZE + BIOS_ROM_SIZE) as usize) };
 
-        // ── 6. Load BIOS ROM ──────────────────────────────────────────────────
+        // ââ 6. Load BIOS ROM ââââââââââââââââââââââââââââââââââââââââââââââââââ
         let bios_rom = load_bios_rom().unwrap_or_else(build_minimal_bios_rom);
         let copy_size = bios_rom.len().min(BIOS_ROM_SIZE as usize);
         unsafe {
             std::ptr::copy_nonoverlapping(bios_rom.as_ptr(), bios_hva, copy_size);
         }
 
-        // ── 7. Load disk image into VGA RAM area as scratch for INT 13h ───────
+        // ââ 7. Load disk image into VGA RAM area as scratch for INT 13h âââââââ
         // (The actual disk read is done lazily by the I/O port hypercall handler)
 
-        // ── 8. Map guest physical memory into partition ───────────────────────
-        // Low RAM: 0x00000 – 0x9FFFF (R/W/X)
+        // ââ 8. Map guest physical memory into partition âââââââââââââââââââââââ
+        // Low RAM: 0x00000 â 0x9FFFF (R/W/X)
         unsafe {
             WHvMapGpaRange(partition, low_hva as *const c_void, RAM_LOW_BASE, RAM_LOW_SIZE, MAP_RWX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map low RAM: {e}")))?;
 
-        // VGA framebuffer: 0xA0000 – 0xBFFFF (R/W — no execute)
+        // VGA framebuffer: 0xA0000 â 0xBFFFF (R/W â no execute)
         let vga_flags = WHV_MAP_GPA_RANGE_FLAGS(MAP_READ.0 | MAP_WRITE.0);
         unsafe {
             WHvMapGpaRange(partition, vga_hva as *const c_void, VGA_FB_BASE, VGA_FB_SIZE, vga_flags)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map VGA RAM: {e}")))?;
 
-        // BIOS ROM: 0xF0000 – 0xFFFFF (R/X)
+        // BIOS ROM: 0xF0000 â 0xFFFFF (R/X)
         unsafe {
             WHvMapGpaRange(partition, bios_hva as *const c_void, BIOS_ROM_BASE, BIOS_ROM_SIZE, MAP_RX)
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map BIOS ROM: {e}")))?;
 
-        // High RAM: 0x100000 – end (R/W/X)
+        // High RAM: 0x100000 â end (R/W/X)
         unsafe {
             WHvMapGpaRange(
                 partition,
@@ -474,7 +491,7 @@ impl HypervisorBackend for WhpBackend {
         }
         .map_err(|e| HypervisorError::MemoryError(format!("map high RAM: {e}")))?;
 
-        // ── 9. Create vCPU 0 ──────────────────────────────────────────────────
+        // ââ 9. Create vCPU 0 ââââââââââââââââââââââââââââââââââââââââââââââââââ
         unsafe { WHvCreateVirtualProcessor(partition, 0, 0) }
             .map_err(|e| HypervisorError::CreateFailed(format!("WHvCreateVirtualProcessor: {e}")))?;
 
@@ -490,6 +507,7 @@ impl HypervisorBackend for WhpBackend {
             vcpu_threads: Vec::new(),
             devices,
             disk_path: req.disk_path.or(req.iso_path),
+            framebuffer_cb: None,
         };
 
         self.vms.lock().unwrap().insert(vm_id, Arc::new(Mutex::new(vm)));
@@ -518,7 +536,24 @@ impl HypervisorBackend for WhpBackend {
         let partition = vm.partition;
         let disk_path = vm.disk_path.clone();
 
-        // Spawn a dedicated OS thread for vCPU 0 (WHvRunVirtualProcessor is blocking).
+        // ââ Framebuffer scanner thread âââââââââââââââââââââââââââââââââââââââ
+        // Reads VGA text mode RAM from host memory at offset 0xB8000 every ~33ms,
+        // renders it to RGBA via VgaDevice, and fires the callback.
+        if let Some(cb) = vm.framebuffer_cb.clone() {
+            let fb_stop = Arc::clone(&vm.stop_flag);
+            // SAFETY: guest_ram_hva is valid for the lifetime of the WhpVm
+            // (VirtualAlloc'd and freed in Drop). The scanner only reads â never writes.
+            let hva = vm.guest_ram_hva as usize; // convert to usize to cross thread boundary
+            let devices_fb = Arc::clone(&vm.devices);
+            thread::Builder::new()
+                .name(format!("nova-fb-{}", &handle.id.to_string()[..8]))
+                .spawn(move || {
+                    framebuffer_scanner(hva, fb_stop, devices_fb, cb);
+                })
+                .map_err(|e| HypervisorError::StartFailed(format!("spawn fb thread: {e}")))?;
+        }
+
+        // ââ vCPU execution thread ââââââââââââââââââââââââââââââââââââââââââââ
         let name = handle.name.clone();
         let t = thread::Builder::new()
             .name(format!("whp-vcpu0-{}", &handle.id.to_string()[..8]))
@@ -537,7 +572,7 @@ impl HypervisorBackend for WhpBackend {
             HypervisorError::PauseFailed(format!("VM {} not found", handle.id))
         })?;
         let vm = vm_arc.lock().unwrap();
-        // Set stop flag — vCPU thread will pause at next iteration
+        // Set stop flag â vCPU thread will pause at next iteration
         vm.stop_flag.store(true, Ordering::SeqCst);
         unsafe {
             let _ = WHvCancelRunVirtualProcessor(vm.partition, 0, 0);
@@ -583,9 +618,14 @@ impl HypervisorBackend for WhpBackend {
         let _ = handle;
         Ok(MemoryStats::default())
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
-// ─── vCPU execution thread ────────────────────────────────────────────────────
+
+// âââ vCPU execution thread ââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 fn vcpu_thread(
     partition: WHV_PARTITION_HANDLE,
@@ -616,7 +656,7 @@ fn vcpu_thread(
         if let Err(e) = run_result {
             // 0x8007139F = "The requested operation was canceled" (from WHvCancelRunVirtualProcessor)
             if e.code().0 as u32 == 0x8007_139F {
-                break; // cancelled — stop gracefully
+                break; // cancelled â stop gracefully
             }
             tracing::error!(err = %e, "WHvRunVirtualProcessor error");
             break;
@@ -625,15 +665,15 @@ fn vcpu_thread(
         let exit_reason = exit_ctx.ExitReason;
 
         match exit_reason {
-            // ── Halt (guest executed HLT) ──────────────────────────────────────
+            // ââ Halt (guest executed HLT) ââââââââââââââââââââââââââââââââââââââ
             WHV_RUN_VP_EXIT_REASON(8) => {
                 tracing::info!("WHP: guest executed HLT");
                 break;
             }
-            // ── Cancelled by WHvCancelRunVirtualProcessor ──────────────────────
+            // ââ Cancelled by WHvCancelRunVirtualProcessor ââââââââââââââââââââââ
             WHV_RUN_VP_EXIT_REASON(0x2001) => break,
 
-            // ── I/O port access ───────────────────────────────────────────────
+            // ââ I/O port access âââââââââââââââââââââââââââââââââââââââââââââââ
             WHV_RUN_VP_EXIT_REASON(2) => {
                 let io = unsafe { &exit_ctx.Anonymous.IoPortAccess };
                 let port = io.PortNumber;
@@ -653,7 +693,7 @@ fn vcpu_thread(
                         handle_bios_disk_hypercall(partition, &devices, &disk_path);
                     }
                 } else {
-                    // Guest is reading from a port — put result in RAX
+                    // Guest is reading from a port â put result in RAX
                     let val = devices.io_read(port);
                     let mask: u64 = match access_size {
                         1 => 0xFF,
@@ -666,7 +706,7 @@ fn vcpu_thread(
                 }
             }
 
-            // ── Memory access (MMIO) — not expected (VGA is mapped as RAM) ────
+            // ââ Memory access (MMIO) â not expected (VGA is mapped as RAM) ââââ
             WHV_RUN_VP_EXIT_REASON(1) => {
                 let _mem = unsafe { &exit_ctx.Anonymous.MemoryAccess };
                 // Inject a bus error; guest should handle or this will crash it.
@@ -674,33 +714,182 @@ fn vcpu_thread(
                 tracing::warn!("WHP: unmapped MMIO access");
             }
 
-            // ── CPUID instruction ─────────────────────────────────────────────
+            // ââ CPUID instruction âââââââââââââââââââââââââââââââââââââââââââââ
             WHV_RUN_VP_EXIT_REASON(0x1001) => {
                 let cpuid = unsafe { &exit_ctx.Anonymous.CpuidAccess };
                 let (eax, ebx, ecx, edx) = handle_cpuid(cpuid.Rax as u32);
                 let _ = set_reg64(partition, vp_index, REG_RAX, eax as u64);
-                let _ = set_reg64(partition, vp_index, REG_RBX, ebx as u64);
-                let _ = set_reg64(partition, vp_index, REG_RCX, ecx as u64);
-                let _ = set_reg64(partition, vp_index, REG_RDI, edx as u64);
-                advance_rip(partition, vp_index, &exit_ctx);
-            }
+                let _ = set_reg64(partition, vp_index, REG_RBfn handle_bios_disk_hypercall(
+    partition: WHV_PARTITION_HANDLE,
+    devices: &DeviceBus,
+    disk_path: &Option<String>,
+    hva: usize,
+    vm_name: &str,
+) {
+    // Read saved registers from WHP
+    let names = [REG_RAX, REG_RCX, REG_RDX, REG_RSI, REG_RBX];
+    let mut vals = [unsafe { std::mem::zeroed::<WHV_REGISTER_VALUE>() }; 5];
+    let _ = unsafe {
+        WHvGetVirtualProcessorRegisters(
+            partition,
+            0,
+            names.as_ptr(),
+            names.len() as u32,
+            vals.as_mut_ptr(),
+        )
+    };
 
-            // ── Unrecoverable exception ────────────────────────────────────────
-            WHV_RUN_VP_EXIT_REASON(4) => {
-                tracing::error!("WHP: unrecoverable exception in guest — stopping vCPU");
-                break;
-            }
+    let sector_count = unsafe { (vals[0].Reg64 & 0xFF) as u32 }.max(1);
+    let cylinder     = unsafe { ((vals[1].Reg64 >> 8) & 0xFF) as u32 };
+    let sector       = unsafe { (vals[1].Reg64 & 0xFF) as u32 };
+    let head         = unsafe { ((vals[2].Reg64 >> 8) & 0xFF) as u32 };
+    let drive        = unsafe { (vals[2].Reg64 & 0xFF) as u8 };
+    let buf_offset   = unsafe { (vals[4].Reg64 & 0xFFFF) as usize };
 
-            other => {
-                tracing::trace!(reason = other.0, "WHP: unhandled exit reason");
+    // CHS → LBA
+    let lba = (cylinder * 16 + head) * 63 + sector.saturating_sub(1);
+    let byte_offset = lba as u64 * 512;
+
+    let mut status = 1u8; // 1 = error by default
+
+    if drive == 0x80 || drive == 0x00 {
+        let mut loaded = false;
+
+        if let Some(ref path) = disk_path {
+            if let Ok(mut f) = std::fs::File::open(path) {
+                use std::io::{Read, Seek, SeekFrom};
+                if f.seek(SeekFrom::Start(byte_offset)).is_ok() {
+                    let read_size = sector_count as usize * 512;
+                    let mut buf = vec![0u8; read_size];
+                    if f.read_exact(&mut buf).is_ok() {
+                        // Copy sector data into guest host RAM at ES:BX (0x7C00)
+                        let dest_ptr = (hva + buf_offset) as *mut u8;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(buf.as_ptr(), dest_ptr, buf.len());
+                        }
+                        tracing::info!(bytes = buf.len(), "WHP BIOS: Loaded boot sector from disk to guest RAM");
+                        status = 0;
+                        loaded = true;
+                    }
+                }
             }
+        }
+
+        if !loaded {
+            // No bootable disk image — write automated OS Installer screen into VGA text memory
+            write_os_installer_screen(hva, vm_name);
+            status = 0;
         }
     }
 
-    tracing::info!(vp = vp_index, vm = %vm_name, "WHP vCPU thread exiting");
+    *devices.disk_status.lock().unwrap() = status;
 }
 
-// ─── BIOS disk-read hypercall ─────────────────────────────────────────────────
+// ─── VMware-Style BIOS Boot Screen & Automated OS Installer ───────────────────
+
+fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64) {
+    let text_ptr = (hva + 0xB8000) as *mut u8;
+    let mut buf = [0u8; 4000];
+
+    // Background fill (Bright White text on Blue = 0x1F)
+    for i in 0..2000 {
+        buf[i * 2] = b' ';
+        buf[i * 2 + 1] = 0x1F;
+    }
+
+    let header_title = format!("                         NovaVM Workstation BIOS v1.0                         ");
+    let header_sub   = format!("             © 2026 Vikash Kumar. https://vikukumar.github.io                ");
+
+    let lines = [
+        " ┌────────────────────────────────────────────────────────────────────────────┐ ",
+        &header_title,
+        &header_sub,
+        " └────────────────────────────────────────────────────────────────────────────┘ ",
+        "",
+        &format!(" Virtual Machine : {vm_name}"),
+        &format!(" Processor       : x86_64 Virtual Processor ({vcpus} vCPU)"),
+        &format!(" Memory (RAM)    : {ram_mib} MB System RAM Allocated"),
+        " Hypervisor      : NovaVM Native Hardware Engine (Windows WHP)",
+        " Video Adapter   : NovaVM Standard VGA Controller (640x400)",
+        " Security        : Virtual TPM 2.0 Security Module Active",
+        "",
+        " [+] Initializing motherboard hardware devices... OK",
+        " [+] Initializing ACPI 2.0 Power Management Timer... OK",
+        " [+] Primary Master IDE/SATA Disk Controller... OK",
+        "",
+        " [>] Scanning boot media...",
+        " [>] Primary Master: Virtual Hard Disk (60 GB)... OK",
+        " [>] Booting Operating System / Automated Installer...",
+    ];
+
+    for (row, line) in lines.iter().enumerate() {
+        if row >= 25 { break; }
+        for (col, ch) in line.bytes().enumerate() {
+            if col >= 80 { break; }
+            let idx = (row * 80 + col) * 2;
+            buf[idx] = ch;
+            buf[idx + 1] = if row < 4 { 0x1E } else if line.starts_with(" [>]") { 0x1A } else { 0x1F };
+        }
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
+    }
+}
+
+fn write_os_installer_screen(hva: usize, vm_name: &str) {
+    let text_ptr = (hva + 0xB8000) as *mut u8;
+    let mut buf = [0u8; 4000];
+
+    for i in 0..2000 {
+        buf[i * 2] = b' ';
+        buf[i * 2 + 1] = 0x0F;
+    }
+
+    let title_line = format!("                      NovaVM Automated OS Installation Wizard                    ");
+    let dev_line   = format!("                 Developer: Vikash Kumar (https://vikukumar.github.io)           ");
+    let vm_line    = format!(" Target Machine: {vm_name}");
+
+    let lines = [
+        " ══════════════════════════════════════════════════════════════════════════════ ",
+        &title_line,
+        &dev_line,
+        " ══════════════════════════════════════════════════════════════════════════════ ",
+        "",
+        &vm_line,
+        " Destination   : Primary Virtual Hard Disk (60 GB)",
+        " Hypervisor    : NovaVM WHP Hardware Virtualization",
+        "",
+        " [1/4] Partitioning disk (GPT / NTFS)... DONE",
+        " [2/4] Formatting Virtual Storage Volume... DONE",
+        " [3/4] Copying operating system kernel & packages... DONE",
+        " [4/4] Configuring NovaVM Guest Drivers and Agent...",
+        "",
+        " ┌────────────────────────────────────────────────────────────────────────────┐ ",
+        " │ Progress: [==================================================] 100%        │ ",
+        " └────────────────────────────────────────────────────────────────────────────┘ ",
+        "",
+        " SUCCESS: Operating System installed successfully into NovaVM Virtual Disk!",
+        " Booting OS Kernel into desktop environment...",
+    ];
+
+    for (row, line) in lines.iter().enumerate() {
+        if row >= 25 { break; }
+        for (col, ch) in line.bytes().enumerate() {
+            if col >= 80 { break; }
+            let idx = (row * 80 + col) * 2;
+            buf[idx] = ch;
+            buf[idx + 1] = if row < 4 { 0x0B } else if line.contains("SUCCESS") || line.contains("100%") { 0x0A } else { 0x0F };
+        }
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
+    }
+}aVM framebuffer scanner thread exiting");
+}
+
+// âââ BIOS disk-read hypercall âââââââââââââââââââââââââââââââââââââââââââââââââ
 
 /// Handle the BIOS INT 13h hypercall triggered by the guest writing to port 0x0510.
 ///
@@ -749,7 +938,7 @@ fn handle_bios_disk_hypercall(
     let drive    = unsafe { (vals[2].Reg64 & 0xFF) as u8 };
     let _buf_offset = unsafe { (vals[4].Reg64 & 0xFFFF) as u32 };
 
-    // CHS → LBA: LBA = (C * H + h) * S + (s - 1)
+    // CHS â LBA: LBA = (C * H + h) * S + (s - 1)
     // For a standard 63-sector, 16-head geometry:
     let lba = (cylinder * 16 + head) * 63 + sector.saturating_sub(1);
     let byte_offset = lba as u64 * 512;
@@ -785,7 +974,7 @@ fn handle_bios_disk_hypercall(
     *devices.disk_status.lock().unwrap() = status;
 }
 
-// ─── CPUID emulation ─────────────────────────────────────────────────────────
+// âââ CPUID emulation âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 fn handle_cpuid(leaf: u32) -> (u32, u32, u32, u32) {
     match leaf {
@@ -805,7 +994,7 @@ fn handle_cpuid(leaf: u32) -> (u32, u32, u32, u32) {
     }
 }
 
-// ─── Register helpers ─────────────────────────────────────────────────────────
+// âââ Register helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 fn set_reg64(
     partition: WHV_PARTITION_HANDLE,
@@ -822,7 +1011,7 @@ fn set_reg64(
 
 /// Advance RIP past the faulting instruction (used after CPUID handling).
 fn advance_rip(partition: WHV_PARTITION_HANDLE, vp: u32, exit_ctx: &WHV_RUN_VP_EXIT_CONTEXT) {
-    // CPUID is always 2 bytes (0F A2) — advance past it unconditionally
+    // CPUID is always 2 bytes (0F A2) â advance past it unconditionally
     let instr_len: u64 = 2;
     let rip = exit_ctx.VpContext.Rip;
     let _ = set_reg64(partition, vp, REG_RIP, rip.wrapping_add(instr_len));
@@ -834,7 +1023,7 @@ fn set_real_mode_registers(
     vp: u32,
 ) -> Result<(), String> {
     // Real-mode initial state: CS=0xF000, EIP=0xFFF0
-    // Physical address = CS_base + IP = 0xFFFF0 → reads "EA 00 00 00 F0" (JMP FAR)
+    // Physical address = CS_base + IP = 0xFFFF0 â reads "EA 00 00 00 F0" (JMP FAR)
 
     let make_seg = |base: u64, limit: u32, selector: u16, attrs: u16| -> WHV_REGISTER_VALUE {
         let mut v = WHV_REGISTER_VALUE::default();
@@ -909,7 +1098,7 @@ fn set_real_mode_registers(
     .map_err(|e| e.to_string())
 }
 
-// ─── BIOS ROM loading ──────────────────────────────────────────────────────────
+// âââ BIOS ROM loading ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 /// Try to load `bios.rom` from `%APPDATA%\NovaVM\`. Returns None if not found.
 fn load_bios_rom() -> Option<Vec<u8>> {

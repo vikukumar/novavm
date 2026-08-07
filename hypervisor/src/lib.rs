@@ -100,6 +100,9 @@ pub trait HypervisorBackend: Send + Sync + std::fmt::Debug {
 
     /// Query live guest memory statistics.
     async fn memory_stats(&self, handle: &VmHandle) -> Result<MemoryStats, HypervisorError>;
+
+    /// Return `self` as `&dyn std::any::Any` for downcasting to concrete types.
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// Detect the best available hypervisor backend.

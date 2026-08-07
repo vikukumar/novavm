@@ -101,6 +101,7 @@ fn main() {
             commands::vm::update_vm_config,
             commands::vm::open_vm_display,
             commands::vm::get_vm_serial_output,
+            commands::vm::get_vm_framebuffer,
             commands::vm::run_guest_script,
             commands::vm::list_guest_users,
             commands::vm::create_guest_user,

@@ -41,6 +41,7 @@ parking_lot = { workspace = true }
 dirs-next = "2"
 async-trait = "0.1"
 ipnet = "2.9"
+base64 = "0.22"
 
 agent = { workspace = true }
 api = { workspace = true }

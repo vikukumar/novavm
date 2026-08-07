@@ -99,6 +99,12 @@ impl Engine {
         &self.registry
     }
 
+    /// Expose the active hypervisor backend.
+    /// Can be downcast to a concrete type for backend-specific features.
+    pub fn hypervisor(&self) -> Arc<dyn HypervisorBackend> {
+        Arc::clone(&self.hypervisor)
+    }
+
     /// Create a new VM from the given configuration, register it, and return its UUID.
     #[instrument(skip(self))]
     pub async fn create_vm(&self, config: VmConfig) -> Result<Uuid, EngineError> {

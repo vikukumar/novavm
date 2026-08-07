@@ -24,7 +24,7 @@ pub use qemu::QemuBackend;
 pub use vbox::VBoxBackend;
 
 #[cfg(target_os = "windows")]
-pub use whp::WhpBackend;
+pub use whp::{WhpBackend, FramebufferCallback};
 
 #[cfg(target_os = "linux")]
 pub use kvm::KvmBackend;

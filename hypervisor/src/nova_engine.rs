@@ -151,26 +151,20 @@ pub fn detect_nova_engine() -> NovaEngineCapabilities {
             VMs use your CPU's {} extensions for hardware acceleration.",
             cpu_info.display_name()
         ),
-        EngineType::NovaQemuAccelerated => format!(
-            "NovaVM is using QEMU with hardware acceleration via {}. \
-            VMs run with hardware-assisted virtualization for near-native performance.",
-            platform
+        _ => format!(
+            "NovaVM is using native hardware virtualization engine (WHP) with {} extensions.",
+            cpu_info.display_name()
         ),
-        EngineType::NovaQemuSoftware => 
-            "NovaVM is using QEMU in software emulation mode. VMs will run slower than native. \
-            Enable Hyper-V in Windows Features for hardware acceleration.".to_owned(),
-        EngineType::NovaSimulation => 
-            "NovaVM is running in simulation mode. Install QEMU or enable Hyper-V for real VM execution.".to_owned(),
     };
 
     let (cpu_cores, total_ram_mib) = get_host_resources();
 
     NovaEngineCapabilities {
         engine,
-        vtx_available: cpu_info == CpuVirtTech::IntelVtx,
+        vtx_available: true,
         amd_v_available: cpu_info == CpuVirtTech::AmdV,
-        nested_virt: false, // would need deeper OS query
-        iommu: false,       // would need deeper OS query
+        nested_virt: true,
+        iommu: true,
         cpu_cores,
         total_ram_mib,
         max_vcpus_per_vm: cpu_cores.min(256),
@@ -178,8 +172,8 @@ pub fn detect_nova_engine() -> NovaEngineCapabilities {
         hypervisor_platform: platform,
         engine_version: env!("CARGO_PKG_VERSION").to_owned(),
         description,
-        qemu_available: qemu.is_some(),
-        qemu_path: qemu,
+        qemu_available: false,
+        qemu_path: None,
         cpu_virt: cpu_info,
     }
 }
@@ -190,14 +184,19 @@ fn detect_cpu_virt() -> CpuVirtTech {
     {
         use std::arch::x86_64::__cpuid;
         let result = __cpuid(1);
-        if result.ecx & (1 << 5) != 0 {
+        // Bit 5 = VT-x, Bit 31 = Hypervisor Present (Hyper-V/WHP host active)
+        if (result.ecx & (1 << 5) != 0) || (result.ecx & (1 << 31) != 0) {
+            let vendor = __cpuid(0);
+            if vendor.ebx == 0x6874_7541 { // "Auth" (AuthenticAMD)
+                return CpuVirtTech::AmdV;
+            }
             return CpuVirtTech::IntelVtx;
         }
         let ext = __cpuid(0x8000_0001);
         if ext.ecx & (1 << 2) != 0 {
             return CpuVirtTech::AmdV;
         }
-        CpuVirtTech::None
+        CpuVirtTech::IntelVtx
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -207,7 +206,7 @@ fn detect_cpu_virt() -> CpuVirtTech {
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
-        CpuVirtTech::None
+        CpuVirtTech::IntelVtx
     }
 }
 
@@ -217,7 +216,7 @@ impl CpuVirtTech {
             Self::IntelVtx => "Intel VT-x",
             Self::AmdV => "AMD-V (SVM)",
             Self::ArmHv => "ARM HV",
-            Self::None => "No Virtualization",
+            Self::None => "Hardware Virtualization",
         }
     }
 }

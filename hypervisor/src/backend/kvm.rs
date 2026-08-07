@@ -2,14 +2,14 @@
 //!
 //! Uses the `kvm-ioctls` crate (safe Rust bindings around the KVM IOCTL API)
 //! to create hardware-accelerated virtual machines directly through the Linux
-//! kernel. No QEMU or VirtualBox installation required — KVM is built into
+//! kernel. No QEMU or VirtualBox installation required â KVM is built into
 //! the Linux kernel and available when `/dev/kvm` is accessible.
 //!
 //! # Boot sequence
 //!
 //! 1. `create_vm`: open `/dev/kvm`, create VM, allocate guest RAM, create vCPU.
 //! 2. `start_vm`: set real-mode registers, spawn vCPU thread.
-//! 3. vCPU loop: call `vcpu.run()` → handle KVM exits (IO, MMIO, HLT).
+//! 3. vCPU loop: call `vcpu.run()` â handle KVM exits (IO, MMIO, HLT).
 //! 4. `stop_vm`: signal stop, join threads, release resources.
 //!
 //! # References
@@ -287,9 +287,14 @@ impl HypervisorBackend for KvmBackend {
     async fn memory_stats(&self, _handle: &VmHandle) -> Result<MemoryStats, HypervisorError> {
         Ok(MemoryStats::default())
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
-// ─── KVM vCPU thread ──────────────────────────────────────────────────────────
+
+// âââ KVM vCPU thread ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 fn kvm_vcpu_thread(
     vcpu: kvm_ioctls::VcpuFd,
@@ -323,7 +328,7 @@ fn kvm_vcpu_thread(
                     tracing::trace!(addr = format_args!("{:#010X}", addr), bytes = data.len(), "KVM MMIO write");
                 }
                 VcpuExit::Hlt => {
-                    tracing::info!("KVM: guest HLT — stopping");
+                    tracing::info!("KVM: guest HLT â stopping");
                     break;
                 }
                 VcpuExit::Shutdown => {
@@ -341,7 +346,7 @@ fn kvm_vcpu_thread(
     tracing::info!(vm = %vm_name, "KVM vCPU thread exiting");
 }
 
-// ─── KVM register initialisation ─────────────────────────────────────────────
+// âââ KVM register initialisation âââââââââââââââââââââââââââââââââââââââââââââ
 
 fn set_kvm_real_mode_regs(vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
     let mut sregs = vcpu.get_sregs().map_err(|e| e.to_string())?;
@@ -376,7 +381,7 @@ fn set_kvm_real_mode_regs(vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
     Ok(())
 }
 
-// ─── Minimal BIOS ROM (same x86 bytes as WHP backend) ────────────────────────
+// âââ Minimal BIOS ROM (same x86 bytes as WHP backend) ââââââââââââââââââââââââ
 
 fn build_minimal_bios_bytes() -> Vec<u8> {
     let mut rom = vec![0u8; BIOS_ROM_SIZE as usize];
@@ -390,7 +395,7 @@ fn build_minimal_bios_bytes() -> Vec<u8> {
         0xB0, b' ', 0xE6, 0xF8, 0xB0, b'B', 0xE6, 0xF8, 0xB0, b'I', 0xE6, 0xF8,
         0xB0, b'O', 0xE6, 0xF8, 0xB0, b'S', 0xE6, 0xF8,
         0xB0, 0x0D, 0xE6, 0xF8, 0xB0, 0x0A, 0xE6, 0xF8,
-        0xF4, 0xEB, 0xFE, // HLT; JMP -2 (halt loop — disk boot TODO)
+        0xF4, 0xEB, 0xFE, // HLT; JMP -2 (halt loop â disk boot TODO)
     ];
     rom[..entry.len()].copy_from_slice(entry);
     // Reset vector

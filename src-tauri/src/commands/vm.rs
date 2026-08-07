@@ -59,6 +59,29 @@ pub async fn create_vm(
 /// Start a VM.
 #[tauri::command]
 pub async fn start_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
+    // Before starting, attach the framebuffer callback on Windows WHP backend.
+    // The callback encodes each rendered frame as base64 RGBA and stores it in AppState.
+    #[cfg(target_os = "windows")]
+    {
+        use hypervisor::backend::WhpBackend;
+        use std::sync::Arc;
+        use crate::state::FramebufferFrame;
+
+        let backend = state.engine.hypervisor();
+        // Downcast to WhpBackend if we're on the WHP path
+        if let Some(whp) = backend.as_any().downcast_ref::<WhpBackend>() {
+            let fb_store = Arc::clone(&state.framebuffers);
+            let seq_ctr = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            whp.set_framebuffer_callback(&vm_id, Arc::new(move |w, h, rgba| {
+                use base64::Engine as _;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&rgba);
+                let seq = seq_ctr.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let frame = FramebufferFrame { width: w, height: h, rgba_b64: b64, seq };
+                fb_store.lock().insert(vm_id, frame);
+            }));
+        }
+    }
+
     match state.engine.start_vm(vm_id).await {
         Ok(()) => {
             state.push_log("INFO", "vm", format!("Virtual machine {vm_id} started successfully"));
@@ -109,6 +132,7 @@ pub async fn resume_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()>
 pub async fn stop_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
     match state.engine.stop_vm(vm_id).await {
         Ok(()) => {
+            state.remove_framebuffer(vm_id);
             state.push_log("INFO", "vm", format!("Virtual machine {vm_id} stopped"));
             Ok(())
         }
@@ -141,6 +165,7 @@ pub async fn reset_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> 
 pub async fn destroy_vm(vm_id: Uuid, state: State<'_, AppState>) -> ApiResult<()> {
     match state.engine.destroy_vm(vm_id).await {
         Ok(()) => {
+            state.remove_framebuffer(vm_id);
             state.metrics.deregister_vm(&vm_id);
             state.push_log("WARN", "vm", format!("Virtual machine {vm_id} destroyed and unregistered"));
             state.sync_vms_to_disk().await;
@@ -281,23 +306,21 @@ pub async fn open_vm_display(
             }))
         }
         "NovaVM-WHP" | "NovaVM-KVM" | "NovaVM-AVF" => {
-            // Native backend: display is handled by the vCPU thread's GDI/framebuffer window.
-            // The Console tab already shows serial output; the display window opens automatically.
+            // Native NovaVM backend: framebuffer is rendered by the vCPU thread
+            // and available via get_vm_framebuffer at ~30fps.
             Ok(serde_json::json!({
                 "backend": caps.backend_name,
                 "status": "native_running",
                 "info": format!(
-                    "'{}' is running via NovaVM's native hypervisor. \
-                    Check the Console tab for serial output. \
-                    A display window will appear if the guest initialises VGA.",
-                    vm_name
+                    "'{}' is running on NovaVM's native hardware hypervisor ({}).",
+                    vm_name, caps.backend_name
                 )
             }))
         }
         _ => Err(ApiError::new(
             "NO_HYPERVISOR",
-            "No hypervisor backend is active. On Windows, enable 'Virtual Machine Platform' \
-            in Windows Features, then restart. NovaVM will automatically use Windows Hypervisor Platform."
+            "Windows Hypervisor Platform is not enabled. \
+            Run in PowerShell (Admin): Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform"
         )),
     }
 }
@@ -310,6 +333,28 @@ pub async fn get_vm_serial_output(
 ) -> ApiResult<String> {
     let output = state.drain_serial_output(vm_id);
     Ok(output)
+}
+
+/// Return the latest rendered display framebuffer for a running VM.
+///
+/// The framebuffer is updated by the vCPU thread at ~30fps when the VM is
+/// running. The returned RGBA data is base64-encoded and can be drawn into a
+/// `<canvas>` element via `ImageData` in the frontend.
+#[tauri::command]
+pub async fn get_vm_framebuffer(
+    vm_id: Uuid,
+    state: State<'_, AppState>,
+) -> ApiResult<serde_json::Value> {
+    match state.get_framebuffer(vm_id) {
+        Some(frame) => Ok(serde_json::json!({
+            "available": true,
+            "width": frame.width,
+            "height": frame.height,
+            "rgba_b64": frame.rgba_b64,
+            "seq": frame.seq,
+        })),
+        None => Ok(serde_json::json!({ "available": false })),
+    }
 }
 
 /// Execute a custom script (Bash, PowerShell, Python, CMD) inside the guest OS.

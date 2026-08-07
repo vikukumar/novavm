@@ -8,6 +8,19 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use uuid::Uuid;
 
+/// A single rendered framebuffer frame from a running VM.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct FramebufferFrame {
+    /// Frame width in pixels.
+    pub width: u32,
+    /// Frame height in pixels.
+    pub height: u32,
+    /// Base64-encoded raw RGBA bytes (width × height × 4 bytes, row-major).
+    pub rgba_b64: String,
+    /// Frame sequence number (monotonically increasing).
+    pub seq: u64,
+}
+
 use engine::Engine;
 use monitor::MetricsCollector;
 use network::NetworkManager;
@@ -29,6 +42,10 @@ pub struct AppState {
     /// Per-VM serial console output (UART bytes captured by native backends).
     /// Keyed by VM UUID; value is a String that accumulates UART TX output.
     pub serial_buffers: Arc<Mutex<HashMap<Uuid, String>>>,
+    /// Per-VM latest rendered display framebuffer.
+    /// Updated by the vCPU / framebuffer scanner thread at ~30fps.
+    /// Keyed by VM UUID.
+    pub framebuffers: Arc<Mutex<HashMap<Uuid, FramebufferFrame>>>,
 }
 
 impl AppState {
@@ -70,6 +87,7 @@ impl AppState {
             disks: Arc::new(parking_lot::RwLock::new(Vec::new())),
             logs: Arc::new(parking_lot::RwLock::new(initial_logs)),
             serial_buffers: Arc::new(Mutex::new(HashMap::new())),
+            framebuffers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -107,6 +125,23 @@ impl AppState {
     pub fn drain_serial_output(&self, vm_id: Uuid) -> String {
         let mut bufs = self.serial_buffers.lock();
         bufs.remove(&vm_id).unwrap_or_default()
+    }
+
+    /// Store an updated framebuffer frame for a VM.
+    #[allow(dead_code)]
+    pub fn put_framebuffer(&self, vm_id: Uuid, frame: FramebufferFrame) {
+        self.framebuffers.lock().insert(vm_id, frame);
+    }
+
+    /// Retrieve the latest framebuffer frame for a VM (if any).
+    pub fn get_framebuffer(&self, vm_id: Uuid) -> Option<FramebufferFrame> {
+        self.framebuffers.lock().get(&vm_id).cloned()
+    }
+
+    /// Remove the framebuffer entry for a VM (called on VM stop/destroy).
+    #[allow(dead_code)]
+    pub fn remove_framebuffer(&self, vm_id: Uuid) {
+        self.framebuffers.lock().remove(&vm_id);
     }
 
     /// Persist all registered VMs to disk JSON storage.
