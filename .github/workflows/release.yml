@@ -3,8 +3,6 @@ name: Release
 on:
   push:
     branches: [main]
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       bump_type:
@@ -17,20 +15,17 @@ on:
           - minor
           - major
       version_override:
-        description: 'Explicit version override (e.g. 1.1.0). Leave empty for auto increment.'
+        description: 'Explicit version override (e.g. 1.0.1). Leave empty for auto increment.'
         required: false
         type: string
 
 permissions:
   contents: write
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  # ─── Determine Version ───────────────────────────────────────────────────────
-  determine-version:
-    name: Determine & Sync Version
+  # ─── 1. Detect & Bump Version ────────────────────────────────────────────────
+  version-and-tag:
+    name: Auto Detect & Bump Version
     runs-on: ubuntu-latest
     outputs:
       release_version: ${{ steps.version.outputs.release_version }}
@@ -39,6 +34,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -52,8 +48,6 @@ jobs:
         run: |
           if [ "${{ inputs.version_override }}" != "" ]; then
             VER="${{ inputs.version_override }}"
-          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VER="${github_ref_name#v}"
           else
             LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
             if [ -z "$LATEST_TAG" ]; then
@@ -81,24 +75,35 @@ jobs:
 
           echo "release_version=$VER" >> $GITHUB_OUTPUT
           echo "tag_name=v$VER" >> $GITHUB_OUTPUT
-          echo "Calculated Version: $VER"
-          echo "Tag Name: v$VER"
+          echo "::notice ::Auto-Detected Version: $VER (Tag: v$VER)"
 
-      - name: Sync Manifest Versions
+      - name: Sync Version Across All Files
         run: |
           node ./scripts/sync-version.js ${{ steps.version.outputs.release_version }}
 
-  # ─── Build Release Packages for All Platforms ────────────────────────────────
-  build-release:
-    name: Build (${{ matrix.platform.os }} - ${{ matrix.platform.target }})
-    needs: determine-version
+      - name: Commit & Push Version Bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json frontend/package.json src-tauri/tauri.conf.json Cargo.toml src-tauri/nsis/generated_branding.nsh src-tauri/scripts/linux-post-install.sh || true
+          git commit -m "chore(release): bump version to ${{ steps.version.outputs.release_version }} [skip ci]" || echo "No changes to commit"
+          git tag -f ${{ steps.version.outputs.tag_name }} || true
+          git push origin main --tags || echo "Push skipped or already up to date"
+
+  # ─── 2. Build for All Platforms & Directly Upload to GitHub Releases ─────────
+  # NOTE: 0% GitHub Actions Storage Used!
+  # Instead of using actions/upload-artifact (which consumes Actions Storage),
+  # each runner directly uploads its binaries to GitHub Releases.
+  build-and-release:
+    name: Build & Release (${{ matrix.platform.target }})
+    needs: version-and-tag
     strategy:
       fail-fast: false
       matrix:
         platform:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            bundles: deb,rpm,appimage
+            bundles: deb,appimage
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: msi,nsis
@@ -118,40 +123,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Sync Version
-        run: node ./scripts/sync-version.js ${{ needs.determine-version.outputs.release_version }}
+        run: node ./scripts/sync-version.js ${{ needs.version-and-tag.outputs.release_version }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.platform.target }}
 
-      - name: Cache Cargo build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.platform.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.platform.target }}-cargo-
-
-      - name: Install Linux dependencies
+      - name: Install Linux System Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libssl-dev pkg-config rpm
+            librsvg2-dev patchelf libssl-dev pkg-config
 
-      - name: Install workspace & frontend dependencies
+      - name: Install NPM Dependencies (Safe npm install)
         run: |
-          npm ci
-          cd frontend && npm ci
+          npm install
+          cd frontend && npm install
 
       - name: Build Tauri Application
         run: |
@@ -160,50 +152,26 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
-      - name: Generate Checksums
+      - name: Prepare Release Assets
         shell: bash
         run: |
-          cd src-tauri/target/${{ matrix.platform.target }}/release/bundle/
-          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) -exec sha256sum {} + > CHECKSUMS.txt || true
-          cat CHECKSUMS.txt || true
+          mkdir -p release_assets
+          BUNDLE_DIR="src-tauri/target/${{ matrix.platform.target }}/release/bundle"
+          if [ -d "$BUNDLE_DIR" ]; then
+            find "$BUNDLE_DIR" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) -exec cp {} release_assets/ \;
+          fi
+          cd release_assets
+          ls -la
+          sha256sum * > SHA256SUMS.txt || true
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: novavm-${{ matrix.platform.target }}-${{ needs.determine-version.outputs.tag_name }}
-          path: |
-            src-tauri/target/${{ matrix.platform.target }}/release/bundle/
-
-  # ─── Create GitHub Release ───────────────────────────────────────────────────
-  create-release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    needs: [determine-version, build-release]
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/
-
-      - name: Consolidate SHA256 Checksums
-        run: |
-          cd artifacts/
-          find . -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.tar.gz" \) -exec sha256sum {} + > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-
-      - name: Create GitHub Release Tag
+      - name: Direct Upload to GitHub Release (0% Action Storage)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.determine-version.outputs.tag_name }}
-          name: NovaVM ${{ needs.determine-version.outputs.tag_name }}
-          files: |
-            artifacts/**/*
-            artifacts/SHA256SUMS.txt
+          tag_name: ${{ needs.version-and-tag.outputs.tag_name }}
+          name: NovaVM ${{ needs.version-and-tag.outputs.tag_name }}
+          files: release_assets/*
           generate_release_notes: true
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
