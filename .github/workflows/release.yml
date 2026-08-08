@@ -115,6 +115,8 @@ jobs:
             bundles: dmg,app
 
     runs-on: ${{ matrix.platform.os }}
+    env:
+      APP_VERSION: ${{ needs.version-and-tag.outputs.release_version }}
 
     steps:
       - uses: actions/checkout@v4
@@ -144,6 +146,10 @@ jobs:
         run: |
           npm install
           cd frontend && npm install
+
+      - name: Pre-build Frontend Web Assets
+        run: |
+          cd frontend && npm run build
 
       - name: Build Tauri Application
         run: |

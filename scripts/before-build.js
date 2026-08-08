@@ -38,9 +38,13 @@ const targetDir = existsSync(rootFrontend)
 console.log(`[NovaVM Build] Building frontend in: ${targetDir}`)
 try {
   const result = spawnSync('npm', ['run', 'build', '--prefix', 'frontend'], { stdio: 'inherit', shell: true })
-  if (result.error) console.warn('[NovaVM Build] Frontend build warning:', result.error.message)
+  if (result.status !== 0) {
+    console.error(`[NovaVM Build] Frontend build failed with exit code ${result.status}`)
+    process.exit(result.status || 1)
+  }
 } catch (e) {
-  console.warn('[NovaVM Build] Frontend build handle warning:', e.message)
+  console.error('[NovaVM Build] Frontend build handle error:', e.message)
+  process.exit(1)
 }
 console.log('[NovaVM Build] Frontend build complete.')
 

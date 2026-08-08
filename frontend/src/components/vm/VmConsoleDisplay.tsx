@@ -366,7 +366,7 @@ function DeviceStatusBar({
 
 function VmToolbar({
   vmId,
-  vmName,
+  vmName: _vmName,
   vmState,
   onStart,
   onPause,
@@ -377,7 +377,7 @@ function VmToolbar({
   launching,
 }: {
   vmId: string
-  vmName: string
+  vmName?: string
   vmState: string
   onStart: () => void
   onPause: () => void

@@ -53,7 +53,7 @@ export function getProjectMetadata(explicitVersion) {
   let githubRefVer = null
   if (process.env.GITHUB_REF && process.env.GITHUB_REF.includes('/tags/')) {
     githubRefVer = process.env.GITHUB_REF.split('/tags/').pop().replace(/^v/, '')
-  } else if (process.env.GITHUB_REF_NAME) {
+  } else if (process.env.GITHUB_REF_NAME && /^v?\d+\.\d+\.\d+/.test(process.env.GITHUB_REF_NAME)) {
     githubRefVer = process.env.GITHUB_REF_NAME.replace(/^v/, '')
   }
 
