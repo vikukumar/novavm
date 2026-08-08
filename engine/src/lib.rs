@@ -119,17 +119,21 @@ impl Engine {
             .find(|d| d.read_only)
             .map(|d| d.image_path.clone());
 
-        // Build the hypervisor-level create request
+        let vm = VirtualMachine::new(config).await?;
+        let id = vm.id();
+
+        // Build the hypervisor-level create request with synchronized VM UUID
         let hyp_req = CreateVmRequest {
-            name: config.name.clone(),
-            vcpus: config.cpu.vcpus,
-            memory_mib: config.memory.size_mib,
-            firmware: match config.firmware {
+            id: Some(id),
+            name: vm.config().name.clone(),
+            vcpus: vm.config().cpu.vcpus,
+            memory_mib: vm.config().memory.size_mib,
+            firmware: match vm.config().firmware {
                 config::FirmwareType::Uefi => hypervisor::types::FirmwareType::Uefi,
                 config::FirmwareType::Bios => hypervisor::types::FirmwareType::Bios,
             },
-            secure_boot: config.secure_boot,
-            vtpm: config.vtpm,
+            secure_boot: vm.config().secure_boot,
+            vtpm: vm.config().vtpm,
             disk_path,
             iso_path,
         };
@@ -139,8 +143,6 @@ impl Engine {
             EngineError::Hypervisor(e.to_string())
         })?;
 
-        let vm = VirtualMachine::new(config).await?;
-        let id = vm.id();
         self.registry.insert(vm);
 
         // Store the hypervisor handle so start/stop can use it
@@ -182,6 +184,7 @@ impl Engine {
                 .find(|d| d.read_only)
                 .map(|d| d.image_path.clone());
             let hyp_req = CreateVmRequest {
+                id: Some(id),
                 name: config.name.clone(),
                 vcpus: config.cpu.vcpus,
                 memory_mib: config.memory.size_mib,

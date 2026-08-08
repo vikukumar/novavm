@@ -184,7 +184,7 @@ impl HypervisorBackend for VBoxBackend {
             ]).ok();
         }
 
-        let handle_id = Uuid::new_v4();
+        let handle_id = req.id.unwrap_or_else(Uuid::new_v4);
         self.vm_names.lock().expect("vm_names poisoned").insert(handle_id, vm_name.clone());
         tracing::info!(name = %vm_name, id = %handle_id, "VBoxBackend: VM created and registered");
 

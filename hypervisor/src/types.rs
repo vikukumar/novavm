@@ -13,6 +13,8 @@ pub enum FirmwareType {
 /// Parameters for creating a new VM at the hypervisor level.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateVmRequest {
+    /// Optional explicitly requested VM UUID. If None, backend generates a new Uuid.
+    pub id: Option<Uuid>,
     /// Human-readable VM name (used for logging / OS-level object names).
     pub name: String,
     /// Number of virtual CPUs.

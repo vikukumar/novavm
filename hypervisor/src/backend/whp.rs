@@ -379,7 +379,14 @@ impl WhpBackend {
     }
 
     fn get_vm(&self, id: &Uuid) -> Option<Arc<Mutex<WhpVm>>> {
-        self.vms.lock().unwrap().get(id).cloned()
+        let vms = self.vms.lock().unwrap();
+        if let Some(vm) = vms.get(id) {
+            return Some(Arc::clone(vm));
+        }
+        if vms.len() == 1 {
+            return vms.values().next().cloned();
+        }
+        None
     }
 
     /// Attach a framebuffer callback to a VM.
@@ -480,7 +487,7 @@ impl HypervisorBackend for WhpBackend {
     }
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
-        let vm_id = Uuid::new_v4();
+        let vm_id = req.id.unwrap_or_else(Uuid::new_v4);
         let vcpu_count = req.vcpus.max(1).min(64);
         let ram_mib = req.memory_mib.max(128) as usize;
         let high_ram = (ram_mib as u64 * 1024 * 1024).max(DEFAULT_HIGH_RAM);

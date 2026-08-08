@@ -327,7 +327,7 @@ impl HypervisorBackend for QemuBackend {
             .map_err(|e| HypervisorError::Internal(e.to_string()))?;
 
         Ok(VmHandle {
-            id: Uuid::new_v4(),
+            id: req.id.unwrap_or_else(Uuid::new_v4),
             name: req.name,
             backend_token: token,
         })

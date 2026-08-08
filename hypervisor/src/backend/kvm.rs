@@ -108,7 +108,7 @@ impl HypervisorBackend for KvmBackend {
     }
 
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
-        let vm_id = Uuid::new_v4();
+        let vm_id = req.id.unwrap_or_else(Uuid::new_v4);
         let ram_mib = req.memory_mib.max(128) as usize;
         let high_ram = ram_mib * 1024 * 1024;
 

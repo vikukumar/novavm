@@ -54,7 +54,7 @@ impl HypervisorBackend for AvfBackend {
     async fn create_vm(&self, req: CreateVmRequest) -> Result<VmHandle, HypervisorError> {
         tracing::info!(name = %req.name, "AVF: creating VZVirtualMachine");
         // VZVirtualMachineConfiguration -> VZVirtualMachine
-        Ok(VmHandle { id: Uuid::new_v4(), name: req.name, backend_token: "avf-stub".to_owned() })
+        Ok(VmHandle { id: req.id.unwrap_or_else(Uuid::new_v4), name: req.name, backend_token: "avf-stub".to_owned() })
     }
 
     async fn start_vm(&self, handle: &VmHandle) -> Result<(), HypervisorError> {
