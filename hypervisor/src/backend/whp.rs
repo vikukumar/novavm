@@ -998,20 +998,17 @@ fn vcpu_thread(
 
             // --- Memory access (MMIO) ----------------------------------------
             WHV_RUN_VP_EXIT_REASON(1) => {
-                let _mem = unsafe { &exit_ctx.Anonymous.MemoryAccess };
-                // Inject a bus error; guest should handle or this will crash it.
-                // Most guests won't hit this if all needed ranges are mapped.
                 tracing::warn!("WHP: unmapped MMIO access");
             }
 
-            // ââ CPUID instruction âââââââââââââââââââââââââââââââââââââââââââââ
+            // ── CPUID instruction ────────────────────────────────────────────
             WHV_RUN_VP_EXIT_REASON(0x1001) => {
                 let cpuid = unsafe { &exit_ctx.Anonymous.CpuidAccess };
                 let (eax, ebx, ecx, edx) = handle_cpuid(cpuid.Rax as u32);
                 let _ = set_reg64(partition, vp_index, REG_RAX, eax as u64);
                 let _ = set_reg64(partition, vp_index, REG_RBX, ebx as u64);
                 let _ = set_reg64(partition, vp_index, REG_RCX, ecx as u64);
-                let _ = set_reg64(partition, vp_index, REG_RDI, edx as u64);
+                let _ = set_reg64(partition, vp_index, REG_RDX, edx as u64);
                 advance_rip(partition, vp_index, &exit_ctx);
             }
 
@@ -1241,7 +1238,7 @@ fn handle_bios_disk_hypercall(
     iso_path: &Option<String>,
     hva: usize,
     _vm_name: &str,
-    shell_state: &Arc<Mutex<GuestShellState>>,
+    _shell_state: &Arc<Mutex<GuestShellState>>,
 ) {
     // Read saved registers from WHP
     let names = [REG_RAX, REG_RCX, REG_RDX, REG_RSI, REG_RBX];
@@ -1356,16 +1353,30 @@ fn write_text_cell(buf: &mut [u8], row: usize, col: usize, ch: u8, attr: u8) {
     }
 }
 
-fn write_text_row(buf: &mut [u8], row: usize, text: &str, attr: u8) {
-    for (col, ch) in text.bytes().enumerate() {
+fn fill_text_row(buf: &mut [u8], row: usize, ch: u8, attr: u8) {
+    for col in 0..80 {
         write_text_cell(buf, row, col, ch, attr);
     }
 }
 
-fn write_text_row_col(buf: &mut [u8], row: usize, start_col: usize, text: &str, attr: u8) {
-    for (i, ch) in text.bytes().enumerate() {
+fn write_text_bytes(buf: &mut [u8], row: usize, bytes: &[u8], attr: u8) {
+    for (col, &ch) in bytes.iter().enumerate() {
+        write_text_cell(buf, row, col, ch, attr);
+    }
+}
+
+fn write_text_bytes_col(buf: &mut [u8], row: usize, start_col: usize, bytes: &[u8], attr: u8) {
+    for (i, &ch) in bytes.iter().enumerate() {
         write_text_cell(buf, row, start_col + i, ch, attr);
     }
+}
+
+fn write_text_str(buf: &mut [u8], row: usize, text: &str, attr: u8) {
+    write_text_bytes(buf, row, text.as_bytes(), attr);
+}
+
+fn write_text_str_col(buf: &mut [u8], row: usize, start_col: usize, text: &str, attr: u8) {
+    write_text_bytes_col(buf, row, start_col, text.as_bytes(), attr);
 }
 
 /// VMware Workstation-quality NovaVM BIOS POST screen.
@@ -1386,28 +1397,26 @@ fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, s
     const BLUE_WHT: u8  = 0x1F; // white on blue   (body)
     const BLUE_GRN: u8  = 0x1A; // green on blue   (OK status)
     const BLUE_CYN: u8  = 0x1B; // cyan on blue    (values)
-    let _blue_blk: u8   = 0x10; // black on blue   (unused/reserved)
 
     // ── Row 0: Top border ──
-    write_text_row(&mut buf, 0, &"\xC9".repeat(1), BLUE_YEL);
-    for col in 0..W { write_text_cell(&mut buf, 0, col, 0xCD, BLUE_YEL); }
+    fill_text_row(&mut buf, 0, 0xCD, BLUE_YEL);
     write_text_cell(&mut buf, 0, 0,    0xC9, BLUE_YEL);
     write_text_cell(&mut buf, 0, W-1,  0xBB, BLUE_YEL);
 
     // ── Row 1: Title ──
     let title = center_pad(" NovaVM Workstation BIOS v2.0 ", W - 2, ' ');
     write_text_cell(&mut buf, 1, 0, 0xBA, BLUE_YEL);
-    write_text_row_col(&mut buf, 1, 1, &title, BLUE_YEL);
+    write_text_str_col(&mut buf, 1, 1, &title, BLUE_YEL);
     write_text_cell(&mut buf, 1, W-1, 0xBA, BLUE_YEL);
 
     // ── Row 2: Copyright ──
     let copy = center_pad(" Copyright (C) 2026 Vikash Kumar  |  vikukumar.github.io ", W - 2, ' ');
     write_text_cell(&mut buf, 2, 0, 0xBA, BLUE_YEL);
-    write_text_row_col(&mut buf, 2, 1, &copy, 0x1B);
+    write_text_str_col(&mut buf, 2, 1, &copy, 0x1B);
     write_text_cell(&mut buf, 2, W-1, 0xBA, BLUE_YEL);
 
     // ── Row 3: Bottom border of header ──
-    for col in 0..W { write_text_cell(&mut buf, 3, col, 0xCD, BLUE_YEL); }
+    fill_text_row(&mut buf, 3, 0xCD, BLUE_YEL);
     write_text_cell(&mut buf, 3, 0,   0xC8, BLUE_YEL);
     write_text_cell(&mut buf, 3, W-1, 0xBC, BLUE_YEL);
 
@@ -1424,14 +1433,14 @@ fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, s
     for (i, (label, value)) in sys_lines.iter().enumerate() {
         let row = 5 + i;
         let line = format!("{label}: {value}");
-        write_text_row(&mut buf, row, &format!("{line:<80}"), BLUE_WHT);
+        write_text_str(&mut buf, row, &format!("{line:<80}"), BLUE_WHT);
         // Colour the label part differently
-        write_text_row(&mut buf, row, &format!("{label}: "), BLUE_CYN);
-        write_text_row_col(&mut buf, row, label.len() + 2, value, BLUE_WHT);
+        write_text_str(&mut buf, row, &format!("{label}: "), BLUE_CYN);
+        write_text_str_col(&mut buf, row, label.len() + 2, value, BLUE_WHT);
     }
 
     // ── Row 13: Divider ──
-    write_text_row(&mut buf, 13, &" ".repeat(W), BLUE_WHT);
+    fill_text_row(&mut buf, 13, b' ', BLUE_WHT);
 
     // ── Rows 14-18: Device POST results ──
     let devices: &[(&str, &str, bool)] = &[
@@ -1444,27 +1453,26 @@ fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, s
     ];
     for (i, (device, status, ok)) in devices.iter().enumerate() {
         let row = 14 + i;
-        write_text_row(&mut buf, row, &format!("{device:<72}"), BLUE_WHT);
-        let status_col = 72;
+        write_text_str(&mut buf, row, &format!("{device:<72}"), BLUE_WHT);
         let status_attr = if *ok { BLUE_GRN } else { 0x1C };
-        write_text_row_col(&mut buf, row, status_col, status, status_attr);
+        write_text_str_col(&mut buf, row, 72, status, status_attr);
     }
 
     // ── Row 21: Separator ──
-    write_text_row(&mut buf, 21, &" ".repeat(W), BLUE_WHT);
+    fill_text_row(&mut buf, 21, b' ', BLUE_WHT);
 
     // ── Row 22: Boot status ──
     let boot_msg = format!("  [{spinner}] Scanning boot media and loading operating system...");
-    write_text_row(&mut buf, 22, &format!("{boot_msg:<80}"), 0x1A);
+    write_text_str(&mut buf, 22, &format!("{boot_msg:<80}"), 0x1A);
 
     // ── Row 23: F-key hints (VMware style) ──
     let hints = "  Press F2 to enter BIOS Setup  |  Press F12 for Boot Menu  |  ESC to Skip Memory Test";
-    write_text_row(&mut buf, 23, &format!("{hints:<80}"), 0x18); // dark cyan on blue
+    write_text_str(&mut buf, 23, &format!("{hints:<80}"), 0x18);
 
     // ── Row 24: Flashing bottom bar ──
-    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); } // white bar
+    fill_text_row(&mut buf, 24, b' ', 0x70);
     let bar_msg = " NovaVM Workstation 2.0  |  Copyright (C) 2026 Vikash Kumar  |  WHP Build 20260808 ";
-    write_text_row(&mut buf, 24, &format!("{bar_msg:<80}"), 0x70); // black on white
+    write_text_str(&mut buf, 24, &format!("{bar_msg:<80}"), 0x70);
 
     unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
@@ -1484,25 +1492,28 @@ fn write_os_installer_screen(hva: usize, vm_name: &str, progress_step: u64) {
     const W: usize = 80;
     let percent = ((progress_step as f64 / 54.0) * 100.0).min(100.0) as usize;
     let filled = (percent * 56 / 100).min(56);
-    let bar: String = (0..56).map(|i| if i < filled { '\xDB' } else { '\xB0' }).collect();
+    let mut bar = vec![0xB0_u8; 56]; // light shade byte
+    for i in 0..filled {
+        bar[i] = 0xDB; // full block byte
+    }
 
     // Header block: dark cyan background (0x30 = black on cyan)
-    for col in 0..W { write_text_cell(&mut buf, 0, col, b' ', 0x30); }
+    fill_text_row(&mut buf, 0, b' ', 0x30);
     let hdr = center_pad(" NovaVM Workstation  —  Automated Guest OS Installer ", W, ' ');
-    write_text_row(&mut buf, 0, &hdr, 0x3F); // bright white on cyan
+    write_text_str(&mut buf, 0, &hdr, 0x3F);
 
-    for col in 0..W { write_text_cell(&mut buf, 1, col, b' ', 0x30); }
+    fill_text_row(&mut buf, 1, b' ', 0x30);
     let hdr2 = center_pad(" Developer: Vikash Kumar  |  vikukumar.github.io  |  Build 2026 ", W, ' ');
-    write_text_row(&mut buf, 1, &hdr2, 0x3B); // yellow on cyan
+    write_text_str(&mut buf, 1, &hdr2, 0x3B);
 
     // Divider
-    write_text_row(&mut buf, 2, &"\xC4".repeat(W), 0x07);
+    fill_text_row(&mut buf, 2, 0xC4, 0x07);
 
     // VM info
-    write_text_row(&mut buf, 3, &format!(" Virtual Machine: {vm_name:<30}    Disk: 60 GB VMDK (SATA)"), 0x07);
-    write_text_row(&mut buf, 4, &format!(" Hypervisor: NovaVM WHP Engine        Filesystem: ext4 / NTFS (auto-detect)"), 0x08);
+    write_text_str(&mut buf, 3, &format!(" Virtual Machine: {vm_name:<30}    Disk: 60 GB VMDK (SATA)"), 0x07);
+    write_text_str(&mut buf, 4, " Hypervisor: NovaVM WHP Engine        Filesystem: ext4 / NTFS (auto-detect)", 0x08);
 
-    write_text_row(&mut buf, 5, &"\xC4".repeat(W), 0x07);
+    fill_text_row(&mut buf, 5, 0xC4, 0x07);
 
     // Installation stages
     let stages: &[(&str, u64, u64)] = &[
@@ -1518,42 +1529,50 @@ fn write_os_installer_screen(hva: usize, vm_name: &str, progress_step: u64) {
 
     for (i, (label, start, end)) in stages.iter().enumerate() {
         let row = 7 + i;
+        let status_bytes: &[u8];
         let status_str: String;
-        let (status, attr): (&str, u8) = if progress_step >= *end {
-            ("\xFB DONE  ", 0x0A)
+        let attr: u8;
+
+        if progress_step >= *end {
+            status_bytes = b"\xFB DONE  ";
+            attr = 0x0A;
         } else if progress_step >= *start {
             let sub = (progress_step - start) * 100 / (end - start);
             status_str = format!("  {sub:>3}%  ");
-            (&status_str, 0x0E)
+            status_bytes = status_str.as_bytes();
+            attr = 0x0E;
         } else {
-            ("  ---   ", 0x08)
+            status_bytes = b"  ---   ";
+            attr = 0x08;
         };
-        let line = format!("  {label:<52} [ {status:>7} ]");
-        write_text_row(&mut buf, row, &format!("{line:<80}"), 0x07);
-        // Re-colour status part
-        write_text_row_col(&mut buf, row, 55, &format!("[ {status:>7} ]"), attr);
+
+        let line = format!("  {label:<52} [ ");
+        write_text_str(&mut buf, row, &line, 0x07);
+        write_text_bytes_col(&mut buf, row, 57, status_bytes, attr);
+        write_text_str_col(&mut buf, row, 57 + status_bytes.len(), " ]", 0x07);
     }
 
     // Progress bar
-    write_text_row(&mut buf, 16, &"\xC4".repeat(W), 0x07);
-    write_text_row(&mut buf, 17, &format!(" Overall Progress:  [{bar}] {percent:>3}%"), 0x0B);
-    write_text_row(&mut buf, 18, &"\xC4".repeat(W), 0x07);
+    fill_text_row(&mut buf, 16, 0xC4, 0x07);
+    write_text_str(&mut buf, 17, " Overall Progress:  [", 0x0B);
+    write_text_bytes_col(&mut buf, 17, 21, &bar, 0x0B);
+    write_text_str_col(&mut buf, 17, 77, "]", 0x0B);
+    write_text_str_col(&mut buf, 17, 73, &format!("{percent:>3}%"), 0x0B);
+    fill_text_row(&mut buf, 18, 0xC4, 0x07);
 
     // Status message
-    let status_msg = if percent >= 100 {
-        "  \xFB  Installation complete! Preparing to boot the new operating system..."
+    if percent >= 100 {
+        write_text_bytes(&mut buf, 19, b"  \xFB  Installation complete! Preparing to boot the new operating system...", 0x0A);
     } else if percent > 50 {
-        "  >>  Installing system files and configuring NovaVM guest environment..."
+        write_text_str(&mut buf, 19, "  >>  Installing system files and configuring NovaVM guest environment...", 0x0E);
     } else {
-        "  >>  Partitioning and formatting virtual storage volume..."
-    };
-    let status_attr: u8 = if percent >= 100 { 0x0A } else { 0x0E };
-    write_text_row(&mut buf, 19, &format!("{status_msg:<80}"), status_attr);
+        write_text_str(&mut buf, 19, "  >>  Partitioning and formatting virtual storage volume...", 0x0E);
+    }
 
     // Bottom bar
-    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); }
-    let bot = format!(" NovaVM Installer  |  Copyright (C) 2026 Vikash Kumar  |  DO NOT POWER OFF  ");
-    write_text_row(&mut buf, 24, &format!("{bot:<80}"), 0x70);
+    fill_text_row(&mut buf, 24, b' ', 0x70);
+    let bot = " NovaVM Installer  |  Copyright (C) 2026 Vikash Kumar  |  DO NOT POWER OFF  ";
+    write_text_str(&mut buf, 24, &format!("{bot:<80}"), 0x70);
 
     unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
@@ -1563,7 +1582,6 @@ fn write_guest_shell_screen(hva: usize, vm_name: &str, shell: &GuestShellState) 
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
 
-    // Background: black (0x00) default
     for i in 0..2000 {
         buf[i * 2] = b' ';
         buf[i * 2 + 1] = 0x07;
@@ -1571,34 +1589,34 @@ fn write_guest_shell_screen(hva: usize, vm_name: &str, shell: &GuestShellState) 
 
     const W: usize = 80;
 
-    // ── Header bar: white on dark blue (like a Linux login screen) ──
-    for col in 0..W { write_text_cell(&mut buf, 0, col, b' ', 0x17); }
+    // Header bar: white on dark blue
+    fill_text_row(&mut buf, 0, b' ', 0x17);
     let h1 = format!(" NovaOS 1.0 LTS  (Linux 6.6.0-novavm x86_64)  |  Machine: {vm_name}");
-    write_text_row(&mut buf, 0, &format!("{h1:<80}"), 0x1F);
+    write_text_str(&mut buf, 0, &format!("{h1:<80}"), 0x1F);
 
-    for col in 0..W { write_text_cell(&mut buf, 1, col, b' ', 0x17); }
+    fill_text_row(&mut buf, 1, b' ', 0x17);
     let h2 = " Vikash Kumar  |  vikukumar.github.io  |  NovaVM WHP Engine  |  Type 'help' for commands";
-    write_text_row(&mut buf, 1, &format!("{h2:<80}"), 0x1B);
+    write_text_str(&mut buf, 1, &format!("{h2:<80}"), 0x1B);
 
-    // ── Divider ──
-    write_text_row(&mut buf, 2, &"\xC4".repeat(W), 0x08);
+    // Divider
+    fill_text_row(&mut buf, 2, 0xC4, 0x08);
 
-    // ── Motd / welcome (shown if no history) ──
+    // Motd / welcome (shown if no history)
     if shell.history_lines.is_empty() {
-        write_text_row(&mut buf, 4,  " Welcome to NovaOS Workstation 1.0 LTS (built on NovaVM 2.0)", 0x0F);
-        write_text_row(&mut buf, 5,  "", 0x07);
-        write_text_row(&mut buf, 6,  "  * NovaVM WHP Engine:     Windows Hypervisor Platform (native)", 0x07);
-        write_text_row(&mut buf, 7,  "  * Kernel:                Linux 6.6.0-novavm  #1 SMP x86_64", 0x07);
-        write_text_row(&mut buf, 8,  "  * Virtual CPUs:          Allocated from host processor", 0x07);
-        write_text_row(&mut buf, 9,  "  * Storage:               Virtual VMDK (SATA, 60 GB)", 0x07);
-        write_text_row(&mut buf, 10, "  * Network:               Intel PRO/1000 (NAT, bridged)", 0x07);
-        write_text_row(&mut buf, 11, "", 0x07);
-        write_text_row(&mut buf, 12, "  Available commands:", 0x0B);
-        write_text_row(&mut buf, 13, "    help   ls    top    uname   whoami  clear", 0x07);
-        write_text_row(&mut buf, 14, "    ping   cat   echo   install setup   reboot", 0x07);
+        write_text_str(&mut buf, 4,  " Welcome to NovaOS Workstation 1.0 LTS (built on NovaVM 2.0)", 0x0F);
+        write_text_str(&mut buf, 5,  "", 0x07);
+        write_text_str(&mut buf, 6,  "  * NovaVM WHP Engine:     Windows Hypervisor Platform (native)", 0x07);
+        write_text_str(&mut buf, 7,  "  * Kernel:                Linux 6.6.0-novavm  #1 SMP x86_64", 0x07);
+        write_text_str(&mut buf, 8,  "  * Virtual CPUs:          Allocated from host processor", 0x07);
+        write_text_str(&mut buf, 9,  "  * Storage:               Virtual VMDK (SATA, 60 GB)", 0x07);
+        write_text_str(&mut buf, 10, "  * Network:               Intel PRO/1000 (NAT, bridged)", 0x07);
+        write_text_str(&mut buf, 11, "", 0x07);
+        write_text_str(&mut buf, 12, "  Available commands:", 0x0B);
+        write_text_str(&mut buf, 13, "    help   ls    top    uname   whoami  clear", 0x07);
+        write_text_str(&mut buf, 14, "    ping   cat   echo   install setup   reboot", 0x07);
     }
 
-    // ── Scroll history into rows 4-22 ──
+    // Scroll history into rows 3..22
     let hist_start_row = if shell.history_lines.is_empty() { 22 } else { 3 };
     let max_hist_rows = 22usize.saturating_sub(hist_start_row);
     let hist_slice = if shell.history_lines.len() > max_hist_rows {
@@ -1615,23 +1633,23 @@ fn write_guest_shell_screen(hva: usize, vm_name: &str, shell: &GuestShellState) 
         } else {
             0x0F // bright white — command output
         };
-        write_text_row(&mut buf, row, &format!("{line:<80}"), attr);
+        write_text_str(&mut buf, row, &format!("{line:<80}"), attr);
     }
 
-    // ── Prompt line (row 23) ──
-    write_text_row(&mut buf, 23, &"\xC4".repeat(W), 0x08);
+    // Prompt line (row 22)
+    fill_text_row(&mut buf, 23, 0xC4, 0x08);
     let prompt = format!("root@novavm:~# {}", shell.current_input);
-    write_text_row(&mut buf, 22, &format!("{prompt:<79}"), 0x0A);
+    write_text_str(&mut buf, 22, &format!("{prompt:<79}"), 0x0A);
     // Cursor block
     let cursor_col = 15 + shell.current_input.len();
     if cursor_col < W {
         write_text_cell(&mut buf, 22, cursor_col, b'_', 0x0F);
     }
 
-    // ── Status bar ──
-    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); }
-    let status = format!(" root@novavm  Shell  |  NovaVM Workstation  |  (C) 2026 Vikash Kumar  ");
-    write_text_row(&mut buf, 24, &format!("{status:<80}"), 0x70);
+    // Status bar
+    fill_text_row(&mut buf, 24, b' ', 0x70);
+    let status = " root@novavm  Shell  |  NovaVM Workstation  |  (C) 2026 Vikash Kumar  ";
+    write_text_str(&mut buf, 24, &format!("{status:<80}"), 0x70);
 
     unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
@@ -1665,8 +1683,8 @@ fn set_reg64(
     val: u64,
 ) -> windows::core::Result<()> {
     let mut v = WHV_REGISTER_VALUE::default();
-    v.Reg64 = val;
     unsafe {
+        v.Reg64 = val;
         WHvSetVirtualProcessorRegisters(partition, vp, &name, 1, &v)
     }
 }
@@ -1689,10 +1707,18 @@ fn set_real_mode_registers(
 
     let make_seg = |base: u64, limit: u32, selector: u16, attrs: u16| -> WHV_REGISTER_VALUE {
         let mut v = WHV_REGISTER_VALUE::default();
-        v.Segment.Base = base;
-        v.Segment.Limit = limit;
-        v.Segment.Selector = selector;
-        v.Segment.Anonymous.Attributes = attrs;
+        unsafe {
+            v.Segment.Base = base;
+            v.Segment.Limit = limit;
+            v.Segment.Selector = selector;
+            v.Segment.Anonymous.Attributes = attrs;
+        }
+        v
+    };
+
+    let make_reg64 = |val: u64| -> WHV_REGISTER_VALUE {
+        let mut v = WHV_REGISTER_VALUE::default();
+        unsafe { v.Reg64 = val; }
         v
     };
 
@@ -1707,7 +1733,7 @@ fn set_real_mode_registers(
         REG_RIP, REG_RSP, REG_RFLAGS, REG_CR0, REG_CR2, REG_CR3, REG_CR4,
     ];
 
-    let mut vals: Vec<WHV_REGISTER_VALUE> = vec![
+    let vals: Vec<WHV_REGISTER_VALUE> = vec![
         // CS: base=0xFFFF0000 (per x86 spec), selector=0xF000, 16-bit code
         make_seg(0xFFFF_0000, 0xFFFF, 0xF000, code_attr),
         // DS/ES/FS/GS/SS: base=0, limit=0xFFFF, 16-bit data
@@ -1716,37 +1742,14 @@ fn set_real_mode_registers(
         make_seg(0, 0xFFFF, 0x0000, data_attr),
         make_seg(0, 0xFFFF, 0x0000, data_attr),
         make_seg(0, 0xFFFF, 0x0000, data_attr),
+        make_reg64(0xFFF0), // RIP
+        make_reg64(0x7C00), // RSP
+        make_reg64(0x0002), // RFLAGS (bit 1 always set per x86 spec)
+        make_reg64(0x0010), // CR0 (ET=1, PE=0 real mode)
+        make_reg64(0),      // CR2
+        make_reg64(0),      // CR3
+        make_reg64(0),      // CR4
     ];
-
-    // Scalar registers
-    let mut rip = WHV_REGISTER_VALUE::default();
-    rip.Reg64 = 0xFFF0;
-    vals.push(rip);
-
-    let mut rsp = WHV_REGISTER_VALUE::default();
-    rsp.Reg64 = 0x7C00;
-    vals.push(rsp);
-
-    let mut rflags = WHV_REGISTER_VALUE::default();
-    rflags.Reg64 = 0x0002; // bit 1 always set per x86 spec
-    vals.push(rflags);
-
-    // CR0: bit 4 (ET) always 1 in modern x86, PE=0 (real mode)
-    let mut cr0 = WHV_REGISTER_VALUE::default();
-    cr0.Reg64 = 0x0010;
-    vals.push(cr0);
-
-    let mut cr2 = WHV_REGISTER_VALUE::default();
-    cr2.Reg64 = 0;
-    vals.push(cr2);
-
-    let mut cr3 = WHV_REGISTER_VALUE::default();
-    cr3.Reg64 = 0;
-    vals.push(cr3);
-
-    let mut cr4 = WHV_REGISTER_VALUE::default();
-    cr4.Reg64 = 0;
-    vals.push(cr4);
 
     unsafe {
         WHvSetVirtualProcessorRegisters(
