@@ -25,6 +25,7 @@ export function VmDetailPage() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [loading, setLoading] = useState(true)
+  const prevStateRef = useRef<string | undefined>(undefined)
 
   // ── Stable individual selectors — never destructure useVmStore() directly ──
   const vm = useVmStore((s) => s.vms.find((v) => v.id === id))
@@ -47,6 +48,15 @@ export function VmDetailPage() {
     }).catch(() => {})
     return () => { isMounted = false }
   }, []) // do NOT put id here — fetchVms loads all VMs anyway
+
+  // Auto-switch to Console tab when VM transitions to running
+  const vmState = useVmStore((s) => s.vms.find((v) => v.id === id)?.state)
+  useEffect(() => {
+    if (vmState === 'running' && prevStateRef.current !== 'running') {
+      setActiveTab('console')
+    }
+    prevStateRef.current = vmState
+  }, [vmState])
 
   // Stable action handlers using getState() so they never change references
   const handleStart = useCallback(() =>
@@ -261,7 +271,9 @@ export function VmDetailPage() {
       )}
 
       {activeTab === 'console' && (
-        <VmConsoleDisplay vmId={vm.id} vmName={vm.name} vmState={vm.state} vcpus={vm.cpu_vcpus} memoryMib={vm.memory_mib} />
+        <div className="-mx-0">
+          <VmConsoleDisplay vmId={vm.id} vmName={vm.name} vmState={vm.state} vcpus={vm.cpu_vcpus} memoryMib={vm.memory_mib} />
+        </div>
       )}
 
       {activeTab === 'scripting' && (
@@ -269,22 +281,38 @@ export function VmDetailPage() {
       )}
 
       {activeTab === 'snapshots' && (
-        <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground text-sm">
-          <Camera size={32} className="mx-auto mb-3 opacity-40" />
-          No snapshots yet.
-          <br />
-          <button
-            onClick={() => toast({ title: 'Snapshot', description: 'Taking snapshot…' })}
-            className="mt-3 text-primary hover:underline"
-          >
-            Take a snapshot
-          </button>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground text-sm">
+            <Camera size={32} className="mx-auto mb-3 opacity-40" />
+            <p className="font-medium text-foreground/70 mb-1">No Snapshots</p>
+            <p className="text-xs mb-4">Snapshots preserve the complete state of your VM so you can revert at any time.</p>
+            <button
+              onClick={() => toast({ title: 'Snapshot', description: 'Creating snapshot of ' + vm.name + '...' })}
+              disabled={vm.state !== 'running' && vm.state !== 'paused'}
+              className="px-4 py-2 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Take Snapshot Now
+            </button>
+          </div>
         </div>
       )}
 
       {activeTab === 'settings' && (
-        <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-          VM settings editor — edit CPU, RAM, disks, NICs, firmware. Only available while stopped.
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <h3 className="text-sm font-semibold">Virtual Machine Settings</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <SettingsRow label="VM Name" value={vm.name} />
+            <SettingsRow label="Processors" value={`${vm.cpu_vcpus} vCPU`} />
+            <SettingsRow label="Memory" value={`${vm.memory_mib} MB`} />
+            <SettingsRow label="Firmware" value="BIOS (x86_64)" />
+            <SettingsRow label="Virtual Disk" value="60 GB (VMDK)" />
+            <SettingsRow label="Network Adapter" value="NAT (Bridged)" />
+            <SettingsRow label="Display" value="NovaVM VGA (640×400)" />
+            <SettingsRow label="USB Controller" value="USB 3.0 xHCI" />
+          </div>
+          <p className="text-xs text-muted-foreground pt-2 border-t border-border">
+            Settings can only be changed while the virtual machine is powered off.
+          </p>
         </div>
       )}
     </div>
@@ -337,6 +365,15 @@ function ConfigItem({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
       <p className="font-medium">{value}</p>
+    </div>
+  )
+}
+
+function SettingsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <span className="text-sm font-mono font-medium text-foreground/90">{value}</span>
     </div>
   )
 }

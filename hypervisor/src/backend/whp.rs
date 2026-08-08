@@ -421,36 +421,96 @@ impl WhpBackend {
                     shell.current_input.clear();
 
                     match cmd.as_str() {
-                        "help" => {
-                            shell.history_lines.push("NovaOS Commands: help, install, ls, top, uname, whoami, clear, ping".to_string());
+                        "help" | "?" => {
+                            shell.history_lines.push("NovaOS 1.0 LTS -- Available Commands:".to_string());
+                            shell.history_lines.push("  System:   uname  whoami  hostname  uptime  date  reboot".to_string());
+                            shell.history_lines.push("  Files:    ls  cat  echo  pwd".to_string());
+                            shell.history_lines.push("  Monitor:  top  htop  free  df  ps  neofetch".to_string());
+                            shell.history_lines.push("  Network:  ip  ping  ifconfig".to_string());
+                            shell.history_lines.push("  NovaVM:   install  nova-info  vmstat  clear".to_string());
                         }
                         "install" | "setup" => {
                             shell.is_installed = false;
                             shell.step_counter = 0;
-                            shell.history_lines.push("Re-starting NovaVM Automated OS Installer Wizard...".to_string());
+                            shell.history_lines.push("Re-starting NovaVM Automated OS Installer...".to_string());
                         }
-                        "ls" | "dir" => {
-                            shell.history_lines.push("bin  boot  dev  etc  home  lib64  opt  proc  root  sys  usr  var".to_string());
+                        "ls" | "ls -la" | "ls -l" | "dir" => {
+                            shell.history_lines.push("total 48".to_string());
+                            shell.history_lines.push("drwxr-xr-x 12 root root 4096 Aug  8 2026 bin".to_string());
+                            shell.history_lines.push("drwxr-xr-x  3 root root 4096 Aug  8 2026 boot".to_string());
+                            shell.history_lines.push("drwxr-xr-x 87 root root 4096 Aug  8 2026 etc".to_string());
+                            shell.history_lines.push("drwxr-xr-x  3 root root 4096 Aug  8 2026 home".to_string());
+                            shell.history_lines.push("drwxr-xr-x  2 root root 4096 Aug  8 2026 root".to_string());
                         }
                         "top" | "htop" => {
-                            shell.history_lines.push("CPU: 2 vCPU [1.2% idle] | RAM: 4096 MB allocated [312 MB used]".to_string());
+                            shell.history_lines.push("top - 19:59:08 up 0:03,  1 user,  load avg: 0.12 0.08 0.03".to_string());
+                            shell.history_lines.push("Tasks:  87 total,   1 running,  86 sleeping".to_string());
+                            shell.history_lines.push("%Cpu(s):  2.1 us,  0.8 sy, 97.0 id".to_string());
+                            shell.history_lines.push("MiB Mem :  4096.0 total,  3712.4 free,   312.2 used".to_string());
                         }
-                        "uname" | "uname -a" => {
-                            shell.history_lines.push("Linux novavm-guest 6.6.0-novavm #1 SMP PREEMPT_DYNAMIC 2026 x86_64 GNU/Linux".to_string());
+                        "free" | "free -h" => {
+                            shell.history_lines.push("               total        used        free".to_string());
+                            shell.history_lines.push("Mem:           4.0Gi       312Mi       3.6Gi".to_string());
+                            shell.history_lines.push("Swap:          2.0Gi          0B       2.0Gi".to_string());
                         }
-                        "whoami" => {
-                            shell.history_lines.push("root".to_string());
+                        "df" | "df -h" => {
+                            shell.history_lines.push("Filesystem      Size  Used Avail Use% Mounted on".to_string());
+                            shell.history_lines.push("/dev/vda1        59G  3.2G   53G   6% /".to_string());
+                            shell.history_lines.push("tmpfs           2.0G     0  2.0G   0% /dev/shm".to_string());
                         }
-                        "clear" | "cls" => {
-                            shell.history_lines.clear();
+                        "ps" | "ps aux" => {
+                            shell.history_lines.push("USER   PID %CPU %MEM VSZ   RSS  COMMAND".to_string());
+                            shell.history_lines.push("root     1  0.0  0.1  16968  6888 /sbin/init".to_string());
+                            shell.history_lines.push("root   312  0.0  0.0   7164  2448 /bin/bash".to_string());
                         }
-                        "ping" | "ping google.com" => {
+                        "uname" | "uname -a" | "uname -r" => {
+                            shell.history_lines.push("Linux novavm-guest 6.6.0-novavm #1 SMP x86_64 GNU/Linux".to_string());
+                        }
+                        "whoami" | "id" => {
+                            shell.history_lines.push("root  uid=0(root) gid=0(root)".to_string());
+                        }
+                        "hostname" => { shell.history_lines.push("novavm-guest".to_string()); }
+                        "uptime"   => { shell.history_lines.push(" 19:59:08 up 3 min,  1 user,  load avg: 0.12".to_string()); }
+                        "date"     => { shell.history_lines.push("Sat Aug  8 19:59:08 UTC 2026".to_string()); }
+                        "pwd"      => { shell.history_lines.push("/root".to_string()); }
+                        "clear" | "cls" | "reset" => { shell.history_lines.clear(); }
+                        "ping" | "ping google.com" | "ping -c 4 google.com" => {
                             shell.history_lines.push("PING google.com (142.250.190.46) 56(84) bytes of data.".to_string());
-                            shell.history_lines.push("64 bytes from 142.250.190.46: icmp_seq=1 ttl=118 time=12.4 ms".to_string());
+                            shell.history_lines.push("64 bytes from lga34s23-in-f14.1e100.net: icmp_seq=1 time=12.4 ms".to_string());
+                            shell.history_lines.push("64 bytes from lga34s23-in-f14.1e100.net: icmp_seq=2 time=11.8 ms".to_string());
+                            shell.history_lines.push("--- google.com: 3 packets, 0% packet loss, avg 12.1 ms ---".to_string());
+                        }
+                        "ip a" | "ip addr" | "ifconfig" => {
+                            shell.history_lines.push("1: lo: <LOOPBACK,UP>  inet 127.0.0.1/8".to_string());
+                            shell.history_lines.push("2: eth0: <BROADCAST,UP>  inet 192.168.1.100/24".to_string());
+                        }
+                        "nova-info" | "vmstat" => {
+                            shell.history_lines.push("NovaVM Guest Information:".to_string());
+                            shell.history_lines.push("  Engine: Windows Hypervisor Platform (WHP)".to_string());
+                            shell.history_lines.push("  BIOS:   NovaVM Workstation BIOS v2.0".to_string());
+                            shell.history_lines.push("  Dev:    Vikash Kumar | vikukumar.github.io".to_string());
+                        }
+                        "neofetch" | "screenfetch" => {
+                            shell.history_lines.push("    OS: NovaOS 1.0 LTS x86_64".to_string());
+                            shell.history_lines.push("    Kernel: 6.6.0-novavm".to_string());
+                            shell.history_lines.push("    Hypervisor: NovaVM WHP 2.0".to_string());
+                            shell.history_lines.push("    CPU: Intel Xeon Virtual".to_string());
+                            shell.history_lines.push("    Memory: 312MiB / 4096MiB".to_string());
+                        }
+                        "reboot" | "shutdown -r now" => {
+                            shell.history_lines.push("Broadcast: System going down for reboot NOW!".to_string());
+                            shell.is_installed = false;
+                            shell.step_counter = 0;
+                        }
+                        other if other.starts_with("echo ") => {
+                            shell.history_lines.push(other[5..].to_string());
+                        }
+                        other if other.starts_with("cat ") => {
+                            shell.history_lines.push(format!("cat: {}: No such file or directory", &other[4..]));
                         }
                         "" => {}
                         other => {
-                            shell.history_lines.push(format!("bash: {other}: command executed successfully"));
+                            shell.history_lines.push(format!("bash: {other}: command not found"));
                         }
                     }
                     if shell.history_lines.len() > 14 {
@@ -1277,132 +1337,225 @@ fn handle_bios_disk_hypercall(
     *devices.disk_status.lock().unwrap() = status;
 }
 
-// --- VMware-Style BIOS Boot Screen & Automated OS Installer -------------------
+// --- NovaVM VMware-Quality Boot Screens ----------------------------------------
 
+/// Write `text` centered in a field of `width`, padded with `fill`.
+fn center_pad(text: &str, width: usize, fill: char) -> String {
+    if text.len() >= width { return text[..width].to_string(); }
+    let total_pad = width - text.len();
+    let left  = total_pad / 2;
+    let right = total_pad - left;
+    format!("{}{}{}", fill.to_string().repeat(left), text, fill.to_string().repeat(right))
+}
+
+fn write_text_cell(buf: &mut [u8], row: usize, col: usize, ch: u8, attr: u8) {
+    if row < 25 && col < 80 {
+        let idx = (row * 80 + col) * 2;
+        buf[idx] = ch;
+        buf[idx + 1] = attr;
+    }
+}
+
+fn write_text_row(buf: &mut [u8], row: usize, text: &str, attr: u8) {
+    for (col, ch) in text.bytes().enumerate() {
+        write_text_cell(buf, row, col, ch, attr);
+    }
+}
+
+fn write_text_row_col(buf: &mut [u8], row: usize, start_col: usize, text: &str, attr: u8) {
+    for (i, ch) in text.bytes().enumerate() {
+        write_text_cell(buf, row, start_col + i, ch, attr);
+    }
+}
+
+/// VMware Workstation-quality NovaVM BIOS POST screen.
+/// Blue background (0x1F / 0x1E) with authentic hardware enumeration.
 fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, spinner: char) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
 
-    // Background fill (Bright White text on Blue = 0x1F)
+    // ── Fill entire screen: bright white on blue (0x1F) ──
     for i in 0..2000 {
         buf[i * 2] = b' ';
         buf[i * 2 + 1] = 0x1F;
     }
 
-    let header_title = format!("                         NovaVM Workstation BIOS v1.0                         ");
-    let header_sub   = format!("             (C) 2026 Vikash Kumar. https://vikukumar.github.io                ");
+    const W: usize = 80;
+    // Colour attributes
+    const BLUE_YEL: u8  = 0x1E; // yellow on blue  (header)
+    const BLUE_WHT: u8  = 0x1F; // white on blue   (body)
+    const BLUE_GRN: u8  = 0x1A; // green on blue   (OK status)
+    const BLUE_CYN: u8  = 0x1B; // cyan on blue    (values)
+    let _blue_blk: u8   = 0x10; // black on blue   (unused/reserved)
 
-    let status_line = format!(" [{spinner}] Booting Operating System / Automated Installer...");
+    // ── Row 0: Top border ──
+    write_text_row(&mut buf, 0, &"\xC9".repeat(1), BLUE_YEL);
+    for col in 0..W { write_text_cell(&mut buf, 0, col, 0xCD, BLUE_YEL); }
+    write_text_cell(&mut buf, 0, 0,    0xC9, BLUE_YEL);
+    write_text_cell(&mut buf, 0, W-1,  0xBB, BLUE_YEL);
 
-    let lines = [
-        " +----------------------------------------------------------------------------+ ",
-        &header_title,
-        &header_sub,
-        " +----------------------------------------------------------------------------+ ",
-        "",
-        &format!(" Virtual Machine : {vm_name}"),
-        &format!(" Processor       : x86_64 Virtual Processor ({vcpus} vCPU)"),
-        &format!(" Memory (RAM)    : {ram_mib} MB System RAM Allocated"),
-        " Hypervisor      : NovaVM Native Hardware Engine (Windows WHP)",
-        " Video Adapter   : NovaVM Standard VGA Controller (640x400)",
-        " Security        : Virtual TPM 2.0 Security Module Active",
-        "",
-        " [+] Initializing motherboard hardware devices... OK",
-        " [+] Initializing ACPI 2.0 Power Management Timer... OK",
-        " [+] Primary Master IDE/SATA Disk Controller... OK",
-        "",
-        " [>] Scanning boot media...",
-        " [>] Primary Master: Virtual Hard Disk (60 GB)... OK",
-        &status_line,
+    // ── Row 1: Title ──
+    let title = center_pad(" NovaVM Workstation BIOS v2.0 ", W - 2, ' ');
+    write_text_cell(&mut buf, 1, 0, 0xBA, BLUE_YEL);
+    write_text_row_col(&mut buf, 1, 1, &title, BLUE_YEL);
+    write_text_cell(&mut buf, 1, W-1, 0xBA, BLUE_YEL);
+
+    // ── Row 2: Copyright ──
+    let copy = center_pad(" Copyright (C) 2026 Vikash Kumar  |  vikukumar.github.io ", W - 2, ' ');
+    write_text_cell(&mut buf, 2, 0, 0xBA, BLUE_YEL);
+    write_text_row_col(&mut buf, 2, 1, &copy, 0x1B);
+    write_text_cell(&mut buf, 2, W-1, 0xBA, BLUE_YEL);
+
+    // ── Row 3: Bottom border of header ──
+    for col in 0..W { write_text_cell(&mut buf, 3, col, 0xCD, BLUE_YEL); }
+    write_text_cell(&mut buf, 3, 0,   0xC8, BLUE_YEL);
+    write_text_cell(&mut buf, 3, W-1, 0xBC, BLUE_YEL);
+
+    // ── Rows 4-10: System information ──
+    let sys_lines: &[(&str, &str)] = &[
+        ("  Virtual Machine ", vm_name),
+        ("  Processor Type  ", &format!("Intel(R) Xeon(R) Virtual ({vcpus} vCPU x86_64)")),
+        ("  System Memory   ", &format!("{ram_mib} MB Installed RAM (ECC Simulation)") ),
+        ("  Hypervisor      ", "NovaVM Native Engine (Windows Hypervisor Platform)"),
+        ("  Display Adapter ", "NovaVM Standard VGA Controller (640x400 Text/Gfx)"),
+        ("  Security Module ", "Virtual TPM 2.0  |  SecureBoot: Enabled"),
+        ("  Build Revision  ", "NovaVM-WHP 2.0.0-dev  |  ACPI 2.0  |  SMBIOS 3.2"),
     ];
-
-    for (row, line) in lines.iter().enumerate() {
-        if row >= 25 { break; }
-        for (col, ch) in line.bytes().enumerate() {
-            if col >= 80 { break; }
-            let idx = (row * 80 + col) * 2;
-            buf[idx] = ch;
-            buf[idx + 1] = if row < 4 { 0x1E } else if line.contains("Booting") { 0x1A } else { 0x1F };
-        }
+    for (i, (label, value)) in sys_lines.iter().enumerate() {
+        let row = 5 + i;
+        let line = format!("{label}: {value}");
+        write_text_row(&mut buf, row, &format!("{line:<80}"), BLUE_WHT);
+        // Colour the label part differently
+        write_text_row(&mut buf, row, &format!("{label}: "), BLUE_CYN);
+        write_text_row_col(&mut buf, row, label.len() + 2, value, BLUE_WHT);
     }
 
-    unsafe {
-        std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
+    // ── Row 13: Divider ──
+    write_text_row(&mut buf, 13, &" ".repeat(W), BLUE_WHT);
+
+    // ── Rows 14-18: Device POST results ──
+    let devices: &[(&str, &str, bool)] = &[
+        ("  [*] Keyboard Controller (PS/2 8042)", "OK", true),
+        ("  [*] ACPI 2.0 Power Management Timer", "OK", true),
+        ("  [*] IDE/SATA Controller — Virtual Hard Disk (60.0 GB)", "OK", true),
+        ("  [*] CD-ROM / DVD-RW Drive (Optical)", "READY", true),
+        ("  [*] Network Adapter — Intel PRO/1000 MT Virtual NIC", "LINKED", true),
+        ("  [*] USB 3.0 xHCI Host Controller", "OK", true),
+    ];
+    for (i, (device, status, ok)) in devices.iter().enumerate() {
+        let row = 14 + i;
+        write_text_row(&mut buf, row, &format!("{device:<72}"), BLUE_WHT);
+        let status_col = 72;
+        let status_attr = if *ok { BLUE_GRN } else { 0x1C };
+        write_text_row_col(&mut buf, row, status_col, status, status_attr);
     }
+
+    // ── Row 21: Separator ──
+    write_text_row(&mut buf, 21, &" ".repeat(W), BLUE_WHT);
+
+    // ── Row 22: Boot status ──
+    let boot_msg = format!("  [{spinner}] Scanning boot media and loading operating system...");
+    write_text_row(&mut buf, 22, &format!("{boot_msg:<80}"), 0x1A);
+
+    // ── Row 23: F-key hints (VMware style) ──
+    let hints = "  Press F2 to enter BIOS Setup  |  Press F12 for Boot Menu  |  ESC to Skip Memory Test";
+    write_text_row(&mut buf, 23, &format!("{hints:<80}"), 0x18); // dark cyan on blue
+
+    // ── Row 24: Flashing bottom bar ──
+    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); } // white bar
+    let bar_msg = " NovaVM Workstation 2.0  |  Copyright (C) 2026 Vikash Kumar  |  WHP Build 20260808 ";
+    write_text_row(&mut buf, 24, &format!("{bar_msg:<80}"), 0x70); // black on white
+
+    unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
 
+/// Professional NovaVM OS Installation screen.
+/// Shows realistic partitioning, formatting, file copy, driver install stages.
 fn write_os_installer_screen(hva: usize, vm_name: &str, progress_step: u64) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
 
+    // Background: black with white text (0x0F)
     for i in 0..2000 {
         buf[i * 2] = b' ';
         buf[i * 2 + 1] = 0x0F;
     }
 
+    const W: usize = 80;
     let percent = ((progress_step as f64 / 54.0) * 100.0).min(100.0) as usize;
-    let filled_len = (percent / 2).min(50);
-    let mut bar_str = String::from("[");
-    for i in 0..50 {
-        if i < filled_len {
-            bar_str.push('=');
-        } else {
-            bar_str.push(' ');
-        }
-    }
-    bar_str.push_str(&format!("] {percent}%"));
+    let filled = (percent * 56 / 100).min(56);
+    let bar: String = (0..56).map(|i| if i < filled { '\xDB' } else { '\xB0' }).collect();
 
-    let title_line = format!("                      NovaVM Automated OS Installation Wizard                    ");
-    let dev_line   = format!("                 Developer: Vikash Kumar (https://vikukumar.github.io)           ");
-    let vm_line    = format!(" Target Machine: {vm_name}");
-    let bar_line   = format!(" | Progress: {bar_str:<58} | ");
+    // Header block: dark cyan background (0x30 = black on cyan)
+    for col in 0..W { write_text_cell(&mut buf, 0, col, b' ', 0x30); }
+    let hdr = center_pad(" NovaVM Workstation  —  Automated Guest OS Installer ", W, ' ');
+    write_text_row(&mut buf, 0, &hdr, 0x3F); // bright white on cyan
 
-    let step1_status = if progress_step > 10 { "DONE" } else { "IN PROGRESS..." };
-    let step2_status = if progress_step > 25 { "DONE" } else if progress_step > 10 { "IN PROGRESS..." } else { "PENDING" };
-    let step3_status = if progress_step > 40 { "DONE" } else if progress_step > 25 { "IN PROGRESS..." } else { "PENDING" };
-    let step4_status = if progress_step >= 50 { "DONE" } else if progress_step > 40 { "IN PROGRESS..." } else { "PENDING" };
+    for col in 0..W { write_text_cell(&mut buf, 1, col, b' ', 0x30); }
+    let hdr2 = center_pad(" Developer: Vikash Kumar  |  vikukumar.github.io  |  Build 2026 ", W, ' ');
+    write_text_row(&mut buf, 1, &hdr2, 0x3B); // yellow on cyan
 
-    let line10 = format!(" [1/4] Partitioning disk (GPT / NTFS)... {step1_status}");
-    let line11 = format!(" [2/4] Formatting Virtual Storage Volume... {step2_status}");
-    let line12 = format!(" [3/4] Copying operating system kernel & packages... {step3_status}");
-    let line13 = format!(" [4/4] Configuring NovaVM Guest Drivers and Agent... {step4_status}");
+    // Divider
+    write_text_row(&mut buf, 2, &"\xC4".repeat(W), 0x07);
 
-    let lines = [
-        " ============================================================================== ",
-        &title_line,
-        &dev_line,
-        " ============================================================================== ",
-        "",
-        &vm_line,
-        " Destination   : Primary Virtual Hard Disk (60 GB)",
-        " Hypervisor    : NovaVM WHP Hardware Virtualization",
-        "",
-        &line10,
-        &line11,
-        &line12,
-        &line13,
-        "",
-        " +----------------------------------------------------------------------------+ ",
-        &bar_line,
-        " +----------------------------------------------------------------------------+ ",
-        "",
-        " SUCCESS: Operating System installed successfully into NovaVM Virtual Disk!",
-        " Booting OS Kernel into desktop environment...",
+    // VM info
+    write_text_row(&mut buf, 3, &format!(" Virtual Machine: {vm_name:<30}    Disk: 60 GB VMDK (SATA)"), 0x07);
+    write_text_row(&mut buf, 4, &format!(" Hypervisor: NovaVM WHP Engine        Filesystem: ext4 / NTFS (auto-detect)"), 0x08);
+
+    write_text_row(&mut buf, 5, &"\xC4".repeat(W), 0x07);
+
+    // Installation stages
+    let stages: &[(&str, u64, u64)] = &[
+        ("Initializing disk and partition table (GPT)",  0, 10),
+        ("Creating primary partitions and swap area",   10, 18),
+        ("Formatting partitions (ext4 / EFI / swap)",   18, 26),
+        ("Copying core OS kernel and initramfs",        26, 35),
+        ("Installing base system packages (1/2)",       35, 42),
+        ("Installing base system packages (2/2)",       42, 48),
+        ("Installing NovaVM Guest Drivers & Agent",     48, 52),
+        ("Configuring bootloader (GRUB2)",              52, 54),
     ];
 
-    for (row, line) in lines.iter().enumerate() {
-        if row >= 25 { break; }
-        for (col, ch) in line.bytes().enumerate() {
-            if col >= 80 { break; }
-            let idx = (row * 80 + col) * 2;
-            buf[idx] = ch;
-            buf[idx + 1] = if row < 4 { 0x0B } else if line.contains("SUCCESS") || line.contains("100%") { 0x0A } else { 0x0F };
-        }
+    for (i, (label, start, end)) in stages.iter().enumerate() {
+        let row = 7 + i;
+        let status_str: String;
+        let (status, attr): (&str, u8) = if progress_step >= *end {
+            ("\xFB DONE  ", 0x0A)
+        } else if progress_step >= *start {
+            let sub = (progress_step - start) * 100 / (end - start);
+            status_str = format!("  {sub:>3}%  ");
+            (&status_str, 0x0E)
+        } else {
+            ("  ---   ", 0x08)
+        };
+        let line = format!("  {label:<52} [ {status:>7} ]");
+        write_text_row(&mut buf, row, &format!("{line:<80}"), 0x07);
+        // Re-colour status part
+        write_text_row_col(&mut buf, row, 55, &format!("[ {status:>7} ]"), attr);
     }
 
-    unsafe {
-        std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
-    }
+    // Progress bar
+    write_text_row(&mut buf, 16, &"\xC4".repeat(W), 0x07);
+    write_text_row(&mut buf, 17, &format!(" Overall Progress:  [{bar}] {percent:>3}%"), 0x0B);
+    write_text_row(&mut buf, 18, &"\xC4".repeat(W), 0x07);
+
+    // Status message
+    let status_msg = if percent >= 100 {
+        "  \xFB  Installation complete! Preparing to boot the new operating system..."
+    } else if percent > 50 {
+        "  >>  Installing system files and configuring NovaVM guest environment..."
+    } else {
+        "  >>  Partitioning and formatting virtual storage volume..."
+    };
+    let status_attr: u8 = if percent >= 100 { 0x0A } else { 0x0E };
+    write_text_row(&mut buf, 19, &format!("{status_msg:<80}"), status_attr);
+
+    // Bottom bar
+    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); }
+    let bot = format!(" NovaVM Installer  |  Copyright (C) 2026 Vikash Kumar  |  DO NOT POWER OFF  ");
+    write_text_row(&mut buf, 24, &format!("{bot:<80}"), 0x70);
+
+    unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
 
 #[allow(dead_code)]
@@ -1410,44 +1563,77 @@ fn write_guest_shell_screen(hva: usize, vm_name: &str, shell: &GuestShellState) 
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
 
-    // Background fill (Grey on Dark = 0x07)
+    // Background: black (0x00) default
     for i in 0..2000 {
         buf[i * 2] = b' ';
         buf[i * 2 + 1] = 0x07;
     }
 
-    let header1 = format!("  NovaOS Workstation 1.0 LTS (Linux 6.6.0-novavm x86_64)                        ");
-    let header2 = format!("  Machine: {vm_name:<12} | Developer: Vikash Kumar | Host: Windows WHP Engine   ");
-    let header3 = format!(" ------------------------------------------------------------------------------ ");
+    const W: usize = 80;
 
-    let mut lines = vec![
-        header1,
-        header2,
-        header3,
-        "  Type 'help' for commands, 'install' to setup, 'top' for RAM, 'clear' to reset.".to_string(),
-        "".to_string(),
-    ];
+    // ── Header bar: white on dark blue (like a Linux login screen) ──
+    for col in 0..W { write_text_cell(&mut buf, 0, col, b' ', 0x17); }
+    let h1 = format!(" NovaOS 1.0 LTS  (Linux 6.6.0-novavm x86_64)  |  Machine: {vm_name}");
+    write_text_row(&mut buf, 0, &format!("{h1:<80}"), 0x1F);
 
-    for line in &shell.history_lines {
-        lines.push(line.clone());
+    for col in 0..W { write_text_cell(&mut buf, 1, col, b' ', 0x17); }
+    let h2 = " Vikash Kumar  |  vikukumar.github.io  |  NovaVM WHP Engine  |  Type 'help' for commands";
+    write_text_row(&mut buf, 1, &format!("{h2:<80}"), 0x1B);
+
+    // ── Divider ──
+    write_text_row(&mut buf, 2, &"\xC4".repeat(W), 0x08);
+
+    // ── Motd / welcome (shown if no history) ──
+    if shell.history_lines.is_empty() {
+        write_text_row(&mut buf, 4,  " Welcome to NovaOS Workstation 1.0 LTS (built on NovaVM 2.0)", 0x0F);
+        write_text_row(&mut buf, 5,  "", 0x07);
+        write_text_row(&mut buf, 6,  "  * NovaVM WHP Engine:     Windows Hypervisor Platform (native)", 0x07);
+        write_text_row(&mut buf, 7,  "  * Kernel:                Linux 6.6.0-novavm  #1 SMP x86_64", 0x07);
+        write_text_row(&mut buf, 8,  "  * Virtual CPUs:          Allocated from host processor", 0x07);
+        write_text_row(&mut buf, 9,  "  * Storage:               Virtual VMDK (SATA, 60 GB)", 0x07);
+        write_text_row(&mut buf, 10, "  * Network:               Intel PRO/1000 (NAT, bridged)", 0x07);
+        write_text_row(&mut buf, 11, "", 0x07);
+        write_text_row(&mut buf, 12, "  Available commands:", 0x0B);
+        write_text_row(&mut buf, 13, "    help   ls    top    uname   whoami  clear", 0x07);
+        write_text_row(&mut buf, 14, "    ping   cat   echo   install setup   reboot", 0x07);
     }
 
-    let active_prompt = format!("root@novavm:~# {}_", shell.current_input);
-    lines.push(active_prompt);
-
-    for (row, line) in lines.iter().enumerate() {
-        if row >= 25 { break; }
-        for (col, ch) in line.bytes().enumerate() {
-            if col >= 80 { break; }
-            let idx = (row * 80 + col) * 2;
-            buf[idx] = ch;
-            buf[idx + 1] = if row < 2 { 0x1F } else if line.starts_with("root@novavm") { 0x0A } else { 0x07 };
-        }
+    // ── Scroll history into rows 4-22 ──
+    let hist_start_row = if shell.history_lines.is_empty() { 22 } else { 3 };
+    let max_hist_rows = 22usize.saturating_sub(hist_start_row);
+    let hist_slice = if shell.history_lines.len() > max_hist_rows {
+        &shell.history_lines[shell.history_lines.len() - max_hist_rows..]
+    } else {
+        &shell.history_lines
+    };
+    for (i, line) in hist_slice.iter().enumerate() {
+        let row = hist_start_row + i;
+        let attr: u8 = if line.starts_with("root@novavm") {
+            0x0A // bright green — prompt echo
+        } else if line.starts_with('[') || line.starts_with(' ') {
+            0x07 // normal output
+        } else {
+            0x0F // bright white — command output
+        };
+        write_text_row(&mut buf, row, &format!("{line:<80}"), attr);
     }
 
-    unsafe {
-        std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000);
+    // ── Prompt line (row 23) ──
+    write_text_row(&mut buf, 23, &"\xC4".repeat(W), 0x08);
+    let prompt = format!("root@novavm:~# {}", shell.current_input);
+    write_text_row(&mut buf, 22, &format!("{prompt:<79}"), 0x0A);
+    // Cursor block
+    let cursor_col = 15 + shell.current_input.len();
+    if cursor_col < W {
+        write_text_cell(&mut buf, 22, cursor_col, b'_', 0x0F);
     }
+
+    // ── Status bar ──
+    for col in 0..W { write_text_cell(&mut buf, 24, col, b' ', 0x70); }
+    let status = format!(" root@novavm  Shell  |  NovaVM Workstation  |  (C) 2026 Vikash Kumar  ");
+    write_text_row(&mut buf, 24, &format!("{status:<80}"), 0x70);
+
+    unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
 
 // --- CPUID emulation ---------------------------------------------------------
