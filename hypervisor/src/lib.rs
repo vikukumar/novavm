@@ -175,6 +175,7 @@ mod tests {
     async fn test_null_backend_lifecycle() {
         let backend = NullBackend;
         let req = CreateVmRequest {
+            id: None,
             name: "test".to_owned(),
             vcpus: 2,
             memory_mib: 512,
