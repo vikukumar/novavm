@@ -1,4 +1,4 @@
-//! Null hypervisor backend â does nothing, always succeeds.
+//! Null hypervisor backend - does nothing, always succeeds.
 //!
 //! Used in unit tests and on platforms where no native backend is available.
 

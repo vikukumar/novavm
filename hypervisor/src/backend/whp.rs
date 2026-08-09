@@ -907,7 +907,7 @@ impl HypervisorBackend for WhpBackend {
 }
 
 
-// â”€â”€â”€ vCPU execution thread â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- vCPU execution thread --------------------------------------------------
 
 fn vcpu_thread(
     partition: WHV_PARTITION_HANDLE,
@@ -941,7 +941,7 @@ fn vcpu_thread(
         if let Err(e) = run_result {
             // 0x8007139F = "The requested operation was canceled" (from WHvCancelRunVirtualProcessor)
             if e.code().0 as u32 == 0x8007_139F {
-                break; // cancelled â€” stop gracefully
+                break; // cancelled - stop gracefully
             }
             tracing::error!(err = %e, "WHvRunVirtualProcessor error");
             break;
