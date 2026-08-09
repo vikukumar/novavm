@@ -306,7 +306,7 @@ impl HypervisorBackend for KvmBackend {
 // âââ KVM vCPU thread ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 fn kvm_vcpu_thread(
-    vcpu: kvm_ioctls::VcpuFd,
+    mut vcpu: kvm_ioctls::VcpuFd,
     stop_flag: Arc<AtomicBool>,
     devices: Arc<DeviceBus>,
     _disk_path: Option<String>,
