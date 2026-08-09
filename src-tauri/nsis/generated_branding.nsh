@@ -4,6 +4,6 @@
 !define NOVAVM_SUPPORT_URL  "https://vikukumar.github.io/support"
 !define NOVAVM_UPDATE_URL   "https://vikukumar.github.io/releases"
 !define NOVAVM_ABOUT_URL    "https://vikukumar.github.io"
-!define NOVAVM_VERSION      "1.0.1"
+!define NOVAVM_VERSION      "1.0.2"
 !define NOVAVM_COPYRIGHT    "© 2026 Vikash Kumar. All rights reserved."
 !define NOVAVM_REG_KEY      "Software\VikashKumar\NovaVM"
