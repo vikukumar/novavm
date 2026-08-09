@@ -39,7 +39,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Calculate Next Version
         id: version
@@ -124,7 +124,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Sync Version
         run: node ./scripts/sync-version.js ${{ needs.version-and-tag.outputs.release_version }}
@@ -168,7 +168,13 @@ jobs:
           fi
           cd release_assets
           ls -la
-          sha256sum * > SHA256SUMS.txt || true
+          ASSET_COUNT=$(ls -1 | wc -l)
+          if [ "$ASSET_COUNT" -gt 0 ]; then
+            sha256sum * > ../SHA256SUMS.txt 2>/dev/null || shasum -a 256 * > ../SHA256SUMS.txt || true
+            if [ -s "../SHA256SUMS.txt" ]; then
+              mv ../SHA256SUMS.txt ./SHA256SUMS.txt
+            fi
+          fi
 
       - name: Direct Upload to GitHub Release (0% Action Storage)
         uses: softprops/action-gh-release@v2

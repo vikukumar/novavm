@@ -28,6 +28,7 @@ windows = { version = "0.58", features = [
 
 [target.'cfg(target_os = "linux")'.dependencies]
 kvm-ioctls = "0.19"
+kvm-bindings = "0.10"
 libc = "0.2"
 
 [dev-dependencies]

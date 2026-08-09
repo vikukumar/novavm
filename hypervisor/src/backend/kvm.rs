@@ -34,7 +34,7 @@ use crate::{
 };
 
 use kvm_ioctls::{Kvm, VcpuExit};
-use kvm_ioctls::kvm_bindings::kvm_userspace_memory_region;
+use kvm_bindings::kvm_userspace_memory_region;
 
 // Guest physical memory layout (same as WHP backend)
 const RAM_LOW_BASE: u64 = 0x0000_0000;
@@ -53,6 +53,15 @@ struct KvmVm {
     vcpu_threads: Vec<thread::JoinHandle<()>>,
     devices: Arc<DeviceBus>,
     disk_path: Option<String>,
+}
+
+impl std::fmt::Debug for KvmVm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KvmVm")
+            .field("guest_ram_size", &self.guest_ram_size)
+            .field("disk_path", &self.disk_path)
+            .finish()
+    }
 }
 
 unsafe impl Send for KvmVm {}
@@ -309,14 +318,15 @@ fn kvm_vcpu_thread(
 
         match vcpu.run() {
             Ok(exit) => match exit {
-                VcpuExit::Io(direction, port, data) => {
-                    use kvm_ioctls::IoDirection;
-                    match direction {
-                        IoDirection::Out => devices.io_write(port, data[0] as u64),
-                        IoDirection::In => {
-                            let val = devices.io_read(port) as u8;
-                            data[0] = val;
-                        }
+                VcpuExit::IoIn(port, data) => {
+                    let val = devices.io_read(port) as u8;
+                    if !data.is_empty() {
+                        data[0] = val;
+                    }
+                }
+                VcpuExit::IoOut(port, data) => {
+                    if !data.is_empty() {
+                        devices.io_write(port, data[0] as u64);
                     }
                 }
                 VcpuExit::MmioRead(addr, data) => {
@@ -328,8 +338,8 @@ fn kvm_vcpu_thread(
                     tracing::trace!(addr = format_args!("{:#010X}", addr), bytes = data.len(), "KVM MMIO write");
                 }
                 VcpuExit::Hlt => {
-                    tracing::info!("KVM: guest HLT â stopping");
-                    break;
+                    thread::sleep(std::time::Duration::from_millis(5));
+                    continue;
                 }
                 VcpuExit::Shutdown => {
                     tracing::info!("KVM: guest shutdown");
