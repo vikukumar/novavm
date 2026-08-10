@@ -4,6 +4,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 import { syncAllMetadata } from './metadata.js'
+import { ensureQemuBundled } from './ensure-qemu.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -26,7 +27,14 @@ console.log(`║  Platform   : ${(os.platform() + ' ' + os.arch()).padEnd(39)}�
 console.log('╚══════════════════════════════════════════════════════╝')
 console.log('')
 
-// 2. Build frontend
+// 2. Ensure QEMU is bundled for offline NovaVM installer
+try {
+  ensureQemuBundled()
+} catch (e) {
+  console.warn('[NovaVM Build] QEMU bundler notice:', e.message)
+}
+
+// 3. Build frontend
 const rootFrontend   = resolve(process.cwd(), 'frontend')
 const parentFrontend = resolve(process.cwd(), '../frontend')
 const targetDir = existsSync(rootFrontend)

@@ -50,15 +50,25 @@ impl QemuBackend {
     pub fn detect() -> Option<Self> {
         let qemu_binary = Self::find_qemu_binary()?;
         tracing::info!(path = %qemu_binary.display(), "QEMU backend detected");
-        Some(Self {
-            qemu_path: qemu_binary,
-            processes: Arc::new(Mutex::new(HashMap::new())),
-        })
+        Some(Self { qemu_path: qemu_binary, processes: Arc::new(Mutex::new(HashMap::new())) })
     }
 
     /// Search well-known locations for the QEMU x86_64 binary.
     fn find_qemu_binary() -> Option<PathBuf> {
-        let mut candidates: Vec<PathBuf> = vec![
+        let mut candidates: Vec<PathBuf> = Vec::new();
+
+        // 1. Check NovaVM bundled installation resources directory first
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                candidates.push(exe_dir.join(r"resources\qemu\qemu-system-x86_64.exe"));
+                candidates.push(exe_dir.join(r"qemu\qemu-system-x86_64.exe"));
+                candidates.push(exe_dir.join("resources/qemu/qemu-system-x86_64"));
+                candidates.push(exe_dir.join("qemu/qemu-system-x86_64"));
+            }
+        }
+
+        // 2. Well-known system installation paths
+        candidates.extend(vec![
             PathBuf::from(r"C:\Program Files\qemu\qemu-system-x86_64.exe"),
             PathBuf::from(r"C:\Program Files (x86)\qemu\qemu-system-x86_64.exe"),
             PathBuf::from(r"C:\qemu\qemu-system-x86_64.exe"),
@@ -67,14 +77,17 @@ impl QemuBackend {
             PathBuf::from("/usr/bin/qemu-system-x86_64"),
             PathBuf::from("/usr/local/bin/qemu-system-x86_64"),
             PathBuf::from("/opt/homebrew/bin/qemu-system-x86_64"),
-        ];
+        ]);
 
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
             candidates.push(PathBuf::from(local).join(r"Programs\qemu\qemu-system-x86_64.exe"));
         }
         if let Ok(user) = std::env::var("USERPROFILE") {
-            candidates.push(PathBuf::from(&user).join(r"scoop\apps\qemu\current\qemu-system-x86_64.exe"));
-            candidates.push(PathBuf::from(&user).join(r"AppData\Local\Programs\qemu\qemu-system-x86_64.exe"));
+            candidates
+                .push(PathBuf::from(&user).join(r"scoop\apps\qemu\current\qemu-system-x86_64.exe"));
+            candidates.push(
+                PathBuf::from(&user).join(r"AppData\Local\Programs\qemu\qemu-system-x86_64.exe"),
+            );
         }
 
         // Check PATH first
@@ -105,10 +118,7 @@ impl QemuBackend {
         args.push("-cpu".into());
         args.push("host,hv_relaxed,hv_spinlocks=0x1fff,hv_vapic,hv_time".into());
         args.push("-smp".into());
-        args.push(format!(
-            "{vcpus},sockets=1,cores={vcpus},threads=1",
-            vcpus = req.vcpus
-        ));
+        args.push(format!("{vcpus},sockets=1,cores={vcpus},threads=1", vcpus = req.vcpus));
 
         // --- Memory ---------------------------------------------------------
         args.push("-m".into());
@@ -126,9 +136,7 @@ impl QemuBackend {
             ];
             if let Some(ovmf) = ovmf_paths.iter().find(|p| std::path::Path::new(p).exists()) {
                 args.push("-drive".into());
-                args.push(format!(
-                    "if=pflash,format=raw,unit=0,file={ovmf},readonly=on"
-                ));
+                args.push(format!("if=pflash,format=raw,unit=0,file={ovmf},readonly=on"));
             }
         }
 
@@ -136,17 +144,13 @@ impl QemuBackend {
         if let Some(disk_path) = &req.disk_path {
             let fmt = detect_disk_format(disk_path);
             args.push("-drive".into());
-            args.push(format!(
-                "file={disk_path},format={fmt},if=virtio,index=0,media=disk"
-            ));
+            args.push(format!("file={disk_path},format={fmt},if=virtio,index=0,media=disk"));
         }
 
         // --- ISO / CD-ROM ---------------------------------------------------
         if let Some(iso_path) = &req.iso_path {
             args.push("-drive".into());
-            args.push(format!(
-                "file={iso_path},format=raw,if=none,id=cdrom0,readonly=on"
-            ));
+            args.push(format!("file={iso_path},format=raw,if=none,id=cdrom0,readonly=on"));
             args.push("-device".into());
             args.push("ide-cd,drive=cdrom0,bootindex=1".into());
         }
@@ -209,11 +213,7 @@ impl QemuBackend {
 
         // Unique name for the QEMU window title
         args.push("-name".into());
-        args.push(format!(
-            "NovaVM: {name} [ID: {id}]",
-            name = handle.name,
-            id = handle.id
-        ));
+        args.push(format!("NovaVM: {name} [ID: {id}]", name = handle.name, id = handle.id));
 
         // No default monitor, use separate monitor on stdio
         args.push("-monitor".into());
@@ -296,10 +296,7 @@ fn detect_disk_format(path: &str) -> &'static str {
 
 /// Try to find qemu-system-x86_64 via PATH.
 fn which_qemu() -> Result<PathBuf, ()> {
-    let output = Command::new("where")
-        .arg("qemu-system-x86_64.exe")
-        .output()
-        .map_err(|_| ())?;
+    let output = Command::new("where").arg("qemu-system-x86_64.exe").output().map_err(|_| ())?;
     if output.status.success() {
         let path_str = String::from_utf8_lossy(&output.stdout);
         let first_line = path_str.lines().next().unwrap_or("").trim().to_owned();
@@ -311,8 +308,7 @@ fn which_qemu() -> Result<PathBuf, ()> {
 }
 
 /// Global VNC slot allocator (starts from 0 = port 5900).
-static VNC_SLOT_COUNTER: std::sync::atomic::AtomicU16 =
-    std::sync::atomic::AtomicU16::new(0);
+static VNC_SLOT_COUNTER: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 
 fn next_vnc_slot() -> u16 {
     VNC_SLOT_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
@@ -346,8 +342,8 @@ impl HypervisorBackend for QemuBackend {
             vnc_slot: next_vnc_slot(),
         };
 
-        let token = serde_json::to_string(&params)
-            .map_err(|e| HypervisorError::Internal(e.to_string()))?;
+        let token =
+            serde_json::to_string(&params).map_err(|e| HypervisorError::Internal(e.to_string()))?;
 
         Ok(VmHandle {
             id: req.id.unwrap_or_else(Uuid::new_v4),
@@ -385,10 +381,7 @@ impl HypervisorBackend for QemuBackend {
             })?;
 
         tracing::info!(id = %handle.id, pid = child.id(), "QEMU process started");
-        self.processes
-            .lock()
-            .expect("process table poisoned")
-            .insert(handle.id, child);
+        self.processes.lock().expect("process table poisoned").insert(handle.id, child);
 
         Ok(())
     }
@@ -452,12 +445,7 @@ impl HypervisorBackend for QemuBackend {
         let table = self.processes.lock().expect("process table poisoned");
         if table.contains_key(&handle.id) {
             // Real memory stats would come from QMP `query-balloon`
-            Ok(MemoryStats {
-                total_mib: 0,
-                used_mib: 0,
-                available_mib: 0,
-                balloon_size_mib: 0,
-            })
+            Ok(MemoryStats { total_mib: 0, used_mib: 0, available_mib: 0, balloon_size_mib: 0 })
         } else {
             Ok(MemoryStats::default())
         }
@@ -467,4 +455,3 @@ impl HypervisorBackend for QemuBackend {
         self
     }
 }
-
