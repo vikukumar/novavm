@@ -90,6 +90,16 @@ jobs:
           git tag -f ${{ steps.version.outputs.tag_name }} || true
           git push origin main --tags || echo "Push skipped or already up to date"
 
+      - name: Create GitHub Release Object
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag_name }}" \
+            --title "NovaVM ${{ steps.version.outputs.tag_name }}" \
+            --generate-notes \
+            --draft=false \
+            --prerelease=false || echo "Release object already exists"
+
   # ─── 2. Build for All Platforms & Directly Upload to GitHub Releases ─────────
   # NOTE: 0% GitHub Actions Storage Used!
   # Instead of using actions/upload-artifact (which consumes Actions Storage),
@@ -162,10 +172,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p release_assets
-          BUNDLE_DIR="src-tauri/target/${{ matrix.platform.target }}/release/bundle"
-          if [ -d "$BUNDLE_DIR" ]; then
-            find "$BUNDLE_DIR" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) -exec cp {} release_assets/ \;
-          fi
+          # Search for all generated installer bundles in root target/ and src-tauri/target/
+          find target src-tauri/target -path "*/release/bundle/*" -type f \( -name "*.msi" -o -name "*.exe" -o -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) -exec cp {} release_assets/ \; 2>/dev/null || true
+
           cd release_assets
           ls -la
           ASSET_COUNT=$(ls -1 | wc -l)
@@ -174,6 +183,8 @@ jobs:
             if [ -s "../SHA256SUMS.txt" ]; then
               mv ../SHA256SUMS.txt ./SHA256SUMS.txt
             fi
+          else
+            echo "Warning: No release bundles found."
           fi
 
       - name: Direct Upload to GitHub Release (0% Action Storage)
@@ -182,7 +193,6 @@ jobs:
           tag_name: ${{ needs.version-and-tag.outputs.tag_name }}
           name: NovaVM ${{ needs.version-and-tag.outputs.tag_name }}
           files: release_assets/*
-          generate_release_notes: true
           draft: false
           prerelease: false
         env:
