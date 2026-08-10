@@ -21,7 +21,7 @@ set -e
 PRODUCT_NAME="NovaVM"
 DEVELOPER="Vikash Kumar"
 HOMEPAGE="https://vikukumar.github.io"
-VERSION="1.0.2"
+VERSION="1.0.3"
 
 log() {
     echo "[$PRODUCT_NAME installer] $1"
