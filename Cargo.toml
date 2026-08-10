@@ -16,7 +16,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 authors = ["Vikash Kumar <vikukumar@users.noreply.github.com>"]
 license = "MIT"
