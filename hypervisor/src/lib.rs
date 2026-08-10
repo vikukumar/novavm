@@ -118,16 +118,24 @@ pub trait HypervisorBackend: Send + Sync + std::fmt::Debug {
 /// 5. **QEMU** — fallback if installed and qemu-system-x86_64 is found.
 /// 6. **NullBackend** — no-op. Tells the user which feature to enable.
 pub fn detect_backend() -> Arc<dyn HypervisorBackend> {
-    // ── 1. Native OS hypervisor APIs ─────────────────────────────────────────
+    // ── 1. Hardware-Accelerated QEMU Engine (Real Virtual Machines with ISO Boot) ──
+    // QEMU uses WHPX on Windows, KVM on Linux, and HVF on macOS for hardware acceleration,
+    // providing real x86 hardware emulation capable of booting ISOs and operating systems.
+    if let Some(qemu) = backend::QemuBackend::detect() {
+        tracing::info!("NovaVM: Hardware-Accelerated Virtual Machine Engine selected via QEMU (WHPX/KVM)");
+        return Arc::new(qemu);
+    }
+
+    // ── 2. Native OS hypervisor APIs ─────────────────────────────────────────
     #[cfg(target_os = "windows")]
     if let Some(whp) = backend::WhpBackend::detect() {
-        tracing::info!("NovaVM-WHP backend: using Windows Hypervisor Platform (no third-party needed)");
+        tracing::info!("NovaVM-WHP backend: using Windows Hypervisor Platform");
         return Arc::new(whp);
     }
 
     #[cfg(target_os = "linux")]
     if let Some(kvm) = backend::KvmBackend::detect() {
-        tracing::info!("NovaVM-KVM backend: using Linux KVM (no third-party needed)");
+        tracing::info!("NovaVM-KVM backend: using Linux KVM");
         return Arc::new(kvm);
     }
 
@@ -137,14 +145,10 @@ pub fn detect_backend() -> Arc<dyn HypervisorBackend> {
         return Arc::new(backend::AvfBackend::new());
     }
 
-    // ── 2. Third-party hypervisors (optional, if installed) ──────────────────
+    // ── 3. Third-party hypervisors ─────────────────────────────────────────────
     if let Some(vbox) = backend::VBoxBackend::detect() {
         tracing::info!("VirtualBox fallback backend selected");
         return Arc::new(vbox);
-    }
-    if let Some(qemu) = backend::QemuBackend::detect() {
-        tracing::info!("QEMU fallback backend selected");
-        return Arc::new(qemu);
     }
 
     // ── 3. Nothing found — give actionable instructions ──────────────────────

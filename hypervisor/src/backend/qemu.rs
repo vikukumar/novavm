@@ -58,17 +58,26 @@ impl QemuBackend {
 
     /// Search well-known locations for the QEMU x86_64 binary.
     fn find_qemu_binary() -> Option<PathBuf> {
-        // Windows: official QEMU installer and common package manager locations
-        let candidates: Vec<PathBuf> = vec![
-            // QEMU for Windows official installer (64-bit)
+        let mut candidates: Vec<PathBuf> = vec![
             PathBuf::from(r"C:\Program Files\qemu\qemu-system-x86_64.exe"),
             PathBuf::from(r"C:\Program Files (x86)\qemu\qemu-system-x86_64.exe"),
-            // Chocolatey / Scoop / WinGet
-            PathBuf::from(r"C:\ProgramData\chocolatey\bin\qemu-system-x86_64.exe"),
+            PathBuf::from(r"C:\qemu\qemu-system-x86_64.exe"),
             PathBuf::from(r"C:\tools\qemu\qemu-system-x86_64.exe"),
+            PathBuf::from(r"C:\ProgramData\chocolatey\bin\qemu-system-x86_64.exe"),
+            PathBuf::from("/usr/bin/qemu-system-x86_64"),
+            PathBuf::from("/usr/local/bin/qemu-system-x86_64"),
+            PathBuf::from("/opt/homebrew/bin/qemu-system-x86_64"),
         ];
 
-        // Also check PATH
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            candidates.push(PathBuf::from(local).join(r"Programs\qemu\qemu-system-x86_64.exe"));
+        }
+        if let Ok(user) = std::env::var("USERPROFILE") {
+            candidates.push(PathBuf::from(&user).join(r"scoop\apps\qemu\current\qemu-system-x86_64.exe"));
+            candidates.push(PathBuf::from(&user).join(r"AppData\Local\Programs\qemu\qemu-system-x86_64.exe"));
+        }
+
+        // Check PATH first
         if let Ok(from_path) = which_qemu() {
             return Some(from_path);
         }
@@ -87,12 +96,10 @@ impl QemuBackend {
         let mut args: Vec<String> = Vec::new();
 
         // --- Machine type ---------------------------------------------------
-        // Use q35 (modern PCIe chipset, better device support) with WHPX acceleration
-        // if available, otherwise fall back to TCG software emulation.
+        // Hardware acceleration: WHPX on Windows, KVM on Linux, HVF on macOS.
+        // Fall back to TCG software emulation if HW virt is unavailable.
         args.push("-machine".into());
-        // WHPX = Windows Hypervisor Platform (Hyper-V backed, fast)
-        // tcg  = software emulation (slow but always works)
-        args.push("q35,accel=whpx:tcg".into());
+        args.push("q35,accel=whpx:kvm:hvf:tcg".into());
 
         // --- CPU ------------------------------------------------------------
         args.push("-cpu".into());
@@ -109,12 +116,13 @@ impl QemuBackend {
 
         // --- Firmware / UEFI ------------------------------------------------
         if req.uefi {
-            // OVMF (UEFI firmware for QEMU) - try common Windows paths
             let ovmf_paths = [
                 r"C:\Program Files\qemu\share\edk2-x86_64-code.fd",
                 r"C:\Program Files\qemu\share\OVMF.fd",
                 r"C:\Program Files (x86)\qemu\share\OVMF.fd",
                 r"C:\tools\qemu\share\OVMF.fd",
+                "/usr/share/OVMF/OVMF_CODE.fd",
+                "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd",
             ];
             if let Some(ovmf) = ovmf_paths.iter().find(|p| std::path::Path::new(p).exists()) {
                 args.push("-drive".into());
@@ -126,10 +134,10 @@ impl QemuBackend {
 
         // --- Primary disk ---------------------------------------------------
         if let Some(disk_path) = &req.disk_path {
+            let fmt = detect_disk_format(disk_path);
             args.push("-drive".into());
             args.push(format!(
-                "file={disk_path},format=qcow2,if=virtio,index=0,media=disk",
-                disk_path = disk_path
+                "file={disk_path},format={fmt},if=virtio,index=0,media=disk"
             ));
         }
 
@@ -137,8 +145,7 @@ impl QemuBackend {
         if let Some(iso_path) = &req.iso_path {
             args.push("-drive".into());
             args.push(format!(
-                "file={iso_path},format=raw,if=none,id=cdrom0,readonly=on",
-                iso_path = iso_path
+                "file={iso_path},format=raw,if=none,id=cdrom0,readonly=on"
             ));
             args.push("-device".into());
             args.push("ide-cd,drive=cdrom0,bootindex=1".into());
@@ -147,7 +154,7 @@ impl QemuBackend {
         // --- Boot order -----------------------------------------------------
         if req.iso_path.is_some() {
             args.push("-boot".into());
-            args.push("order=dc,menu=on".into()); // d=CD-ROM first, c=disk
+            args.push("order=dc,menu=on".into()); // d=CD-ROM first (ISO boot), c=disk second
         } else {
             args.push("-boot".into());
             args.push("order=c,menu=on".into()); // c=disk only
@@ -268,6 +275,22 @@ impl<'de> serde::Deserialize<'de> for QemuLaunchParams {
             iso_path: r.iso_path,
             vnc_slot: r.vnc_slot,
         })
+    }
+}
+
+/// Auto-detect the QEMU disk format from file extension.
+fn detect_disk_format(path: &str) -> &'static str {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".qcow2") || lower.ends_with(".qcow") {
+        "qcow2"
+    } else if lower.ends_with(".vmdk") {
+        "vmdk"
+    } else if lower.ends_with(".vdi") {
+        "vdi"
+    } else if lower.ends_with(".vhd") || lower.ends_with(".vhdx") {
+        "vpc"
+    } else {
+        "raw"
     }
 }
 

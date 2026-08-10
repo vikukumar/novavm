@@ -750,30 +750,21 @@ impl HypervisorBackend for WhpBackend {
                         tracing::info!(path = %path, "WHP Boot Manager: Loaded boot sector from ISO image into guest RAM");
                     }
                 }
-            } else {
-                install_os_to_disk(&disk_path, &handle.name);
-                if let Some(ref path) = disk_path {
-                    if let Ok(mut f) = std::fs::File::open(path) {
-                        use std::io::{Read, Seek, SeekFrom};
-                        let mut mbr = [0u8; 512];
-                        if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
-                            let dest_ptr = (hva + 0x7C00) as *mut u8;
-                            unsafe {
-                                std::ptr::copy_nonoverlapping(mbr.as_ptr(), dest_ptr, 512);
-                            }
+            } else if let Some(ref path) = disk_path {
+                if let Ok(mut f) = std::fs::File::open(path) {
+                    use std::io::{Read, Seek, SeekFrom};
+                    let mut mbr = [0u8; 512];
+                    if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
+                        let dest_ptr = (hva + 0x7C00) as *mut u8;
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(mbr.as_ptr(), dest_ptr, 512);
                         }
                     }
                 }
-                vm.shell_state.lock().unwrap().is_installed = true;
-                tracing::info!("WHP Boot Manager: Installed & launched NovaOS Workstation OS directly to Virtual Hard Disk");
             }
         }
 
-        if vm.shell_state.lock().unwrap().is_installed {
-            write_guest_shell_screen(hva, &handle.name, &vm.shell_state.lock().unwrap());
-        } else {
-            write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib, '/');
-        }
+        write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib, '/');
 
         // --- Framebuffer scanner thread ---
         // Always spawns when VM starts: reads VGA text mode RAM at offset 0xB8000 every ~33ms,
