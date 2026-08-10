@@ -739,16 +739,8 @@ impl HypervisorBackend for WhpBackend {
 
         if !disk_bootable {
             if let Some(ref path) = iso_path {
-                if let Ok(mut f) = std::fs::File::open(path) {
-                    use std::io::{Read, Seek, SeekFrom};
-                    let mut boot_sector = [0u8; 512];
-                    if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut boot_sector).is_ok() {
-                        let dest_ptr = (hva + 0x7C00) as *mut u8;
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(boot_sector.as_ptr(), dest_ptr, 512);
-                        }
-                        tracing::info!(path = %path, "WHP Boot Manager: Loaded boot sector from ISO image into guest RAM");
-                    }
+                if load_iso_boot_sector(path, hva) {
+                    tracing::info!(path = %path, "WHP Boot Manager: Successfully loaded ISO boot image into guest RAM at 0x7C00");
                 }
             } else if let Some(ref path) = disk_path {
                 if let Ok(mut f) = std::fs::File::open(path) {
@@ -1756,15 +1748,45 @@ fn set_real_mode_registers(
 
 // --- BIOS ROM loading --------------------------------------------------------
 
-/// Try to load `bios.rom` from `%APPDATA%\NovaVM\`. Returns None if not found.
-fn load_bios_rom() -> Option<Vec<u8>> {
-    let appdata = std::env::var("APPDATA").ok()?;
-    let path = PathBuf::from(appdata).join("NovaVM").join("bios.rom");
-    if path.exists() {
-        let data = std::fs::read(&path).ok()?;
-        tracing::info!(?path, bytes = data.len(), "WHP: loaded BIOS ROM from disk");
-        Some(data)
-    } else {
-        None
+/// Parse El Torito ISO 9660 volume descriptors or hybrid MBR to load boot code into guest RAM at 0x7C00.
+fn load_iso_boot_sector(iso_path: &str, hva: usize) -> bool {
+    let Ok(mut f) = std::fs::File::open(iso_path) else { return false; };
+    use std::io::{Read, Seek, SeekFrom};
+
+    // Try El Torito Volume Descriptor at LBA 17 (0x8800)
+    let mut sector17 = [0u8; 2048];
+    if f.seek(SeekFrom::Start(17 * 2048)).is_ok() && f.read_exact(&mut sector17).is_ok() {
+        if &sector17[1..6] == b"CD001" && &sector17[7..30] == b"EL TORITO SPECIFICATION" {
+            let catalog_lba = u32::from_le_bytes([sector17[0x47], sector17[0x48], sector17[0x49], sector17[0x4A]]);
+            let mut catalog = [0u8; 2048];
+            if f.seek(SeekFrom::Start(catalog_lba as u64 * 2048)).is_ok() && f.read_exact(&mut catalog).is_ok() {
+                let boot_lba = u32::from_le_bytes([catalog[0x28], catalog[0x29], catalog[0x2A], catalog[0x2B]]);
+                let sector_count = u16::from_le_bytes([catalog[0x26], catalog[0x27]]);
+                let boot_bytes = if sector_count > 0 { sector_count as usize * 512 } else { 2048 };
+
+                let mut boot_code = vec![0u8; boot_bytes.max(512)];
+                if f.seek(SeekFrom::Start(boot_lba as u64 * 2048)).is_ok() && f.read_exact(&mut boot_code[..boot_bytes]).is_ok() {
+                    let dest_ptr = (hva + 0x7C00) as *mut u8;
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(boot_code.as_ptr(), dest_ptr, boot_code.len().min(65536));
+                    }
+                    tracing::info!(path = %iso_path, boot_lba, boot_bytes, "El Torito ISO Bootloader: Loaded ISO boot code into guest RAM at 0x7C00");
+                    return true;
+                }
+            }
+        }
     }
+
+    // Hybrid ISO fallback (MBR at sector 0)
+    let mut mbr = [0u8; 512];
+    if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
+        let dest_ptr = (hva + 0x7C00) as *mut u8;
+        unsafe {
+            std::ptr::copy_nonoverlapping(mbr.as_ptr(), dest_ptr, 512);
+        }
+        tracing::info!(path = %iso_path, "ISO Bootloader: Loaded hybrid ISO MBR boot sector into guest RAM at 0x7C00");
+        return true;
+    }
+
+    false
 }

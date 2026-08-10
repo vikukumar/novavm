@@ -37,6 +37,7 @@ pub mod pic;
 pub mod pit;
 pub mod rtc;
 pub mod tpm;
+pub mod net;
 pub mod uart;
 pub mod usb;
 pub mod vga;
@@ -49,6 +50,7 @@ pub use pci::PciBus;
 pub use pic::Pic8259;
 pub use pit::Pit8253;
 pub use rtc::Rtc;
+pub use net::VirtioNetDevice;
 pub use tpm::TpmDevice;
 pub use uart::Uart8250;
 pub use usb::UsbController;
@@ -81,6 +83,8 @@ pub struct DeviceBus {
     pub acpi: Mutex<AcpiDevice>,
     /// Dual Channel IDE / ATA Controller (0x1F0 / 0x170).
     pub ide: Mutex<IdeController>,
+    /// Native VirtIO Network Controller (0xC020–0xC03F).
+    pub net: Mutex<VirtioNetDevice>,
     /// BIOS disk-read result flag (0=ok, 1=error) — written by BIOS hypercall handler.
     pub disk_status: Mutex<u8>,
 }
@@ -100,6 +104,7 @@ impl DeviceBus {
             usb: Mutex::new(UsbController::new()),
             acpi: Mutex::new(AcpiDevice::new()),
             ide: Mutex::new(IdeController::new()),
+            net: Mutex::new(VirtioNetDevice::new()),
             disk_status: Mutex::new(0),
         })
     }
@@ -143,6 +148,8 @@ impl DeviceBus {
             0xCFC..=0xCFF => self.pci.lock().unwrap().read_config_data() as u64,
             // UHCI USB Controller
             0xC000..=0xC01F => self.usb.lock().unwrap().read_io(port - 0xC000, 2) as u64,
+            // VirtIO Network Controller
+            0xC020..=0xC03F => self.net.lock().unwrap().io_read((port - 0xC020) as u8) as u64,
             // Speaker / DMA / unhandled ISA ports — floating bus returns 0xFF
             _ => 0xFF,
         }
@@ -180,6 +187,8 @@ impl DeviceBus {
             0xCFC..=0xCFF => self.pci.lock().unwrap().write_config_data(data as u32),
             // UHCI USB Controller
             0xC000..=0xC01F => self.usb.lock().unwrap().write_io(port - 0xC000, data as u32, 2),
+            // VirtIO Network Controller
+            0xC020..=0xC03F => self.net.lock().unwrap().io_write((port - 0xC020) as u8, b),
             // DMA pages, ISA DMA controller — silently ignore
             0x00..=0x1F | 0x80..=0x9F | 0xC0..=0xDF => {}
             _ => {}
