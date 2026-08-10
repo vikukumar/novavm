@@ -31,7 +31,6 @@
 use std::{
     collections::HashMap,
     ffi::c_void,
-    path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -615,7 +614,7 @@ impl HypervisorBackend for WhpBackend {
         let high_hva = unsafe { host_mem.add((RAM_LOW_SIZE + VGA_FB_SIZE + BIOS_ROM_SIZE) as usize) };
 
         // --- 6. Load BIOS ROM ---
-        let bios_rom = load_bios_rom().unwrap_or_else(build_minimal_bios_rom);
+        let bios_rom = build_minimal_bios_rom();
         let copy_size = bios_rom.len().min(BIOS_ROM_SIZE as usize);
         unsafe {
             std::ptr::copy_nonoverlapping(bios_rom.as_ptr(), bios_hva, copy_size);
@@ -1690,18 +1689,16 @@ fn set_real_mode_registers(
 
     let make_seg = |base: u64, limit: u32, selector: u16, attrs: u16| -> WHV_REGISTER_VALUE {
         let mut v = WHV_REGISTER_VALUE::default();
-        unsafe {
-            v.Segment.Base = base;
-            v.Segment.Limit = limit;
-            v.Segment.Selector = selector;
-            v.Segment.Anonymous.Attributes = attrs;
-        }
+        v.Segment.Base = base;
+        v.Segment.Limit = limit;
+        v.Segment.Selector = selector;
+        v.Segment.Anonymous.Attributes = attrs;
         v
     };
 
     let make_reg64 = |val: u64| -> WHV_REGISTER_VALUE {
         let mut v = WHV_REGISTER_VALUE::default();
-        unsafe { v.Reg64 = val; }
+        v.Reg64 = val;
         v
     };
 
