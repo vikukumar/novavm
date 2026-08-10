@@ -44,7 +44,8 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/**"
+      "resources/*",
+      "resources/**/*"
     ],
     "externalBin": [],
     "copyright": "© 2026 Vikash Kumar. All rights reserved.",

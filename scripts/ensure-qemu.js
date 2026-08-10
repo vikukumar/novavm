@@ -11,9 +11,16 @@ import { execSync } from 'node:child_process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const resourcesDir = resolve(__dirname, '../src-tauri/resources/qemu');
 
+import { writeFileSync } from 'node:fs';
+
 export function ensureQemuBundled() {
   if (!existsSync(resourcesDir)) {
     mkdirSync(resourcesDir, { recursive: true });
+  }
+
+  const placeholder = resolve(resourcesDir, 'README.txt');
+  if (!existsSync(placeholder)) {
+    writeFileSync(placeholder, 'NovaVM Bundled QEMU Directory\n');
   }
 
   const qemuExe = resolve(resourcesDir, 'qemu-system-x86_64.exe');
