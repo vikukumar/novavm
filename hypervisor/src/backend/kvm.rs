@@ -244,8 +244,8 @@ impl HypervisorBackend for KvmBackend {
         let vcpu = vm.create_vcpu(0)
             .map_err(|e| HypervisorError::StartFailed(format!("create_vcpu: {e}")))?;
 
-        // Set real-mode registers
-        set_kvm_real_mode_regs(&vcpu)
+        // Set architecture-specific CPU registers
+        set_kvm_regs(&vm, &vcpu)
             .map_err(|e| HypervisorError::StartFailed(format!("set regs: {e}")))?;
 
         stop_flag.store(false, Ordering::SeqCst);
@@ -358,7 +358,8 @@ fn kvm_vcpu_thread(
 
 // --- KVM register initialisation --------------------------------------------
 
-fn set_kvm_real_mode_regs(vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
+#[cfg(target_arch = "x86_64")]
+fn set_kvm_regs(_vm: &kvm_ioctls::VmFd, vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
     let mut sregs = vcpu.get_sregs().map_err(|e| e.to_string())?;
 
     // Real mode: CS points to BIOS at 0xF000, EIP=0xFFF0
@@ -388,6 +389,19 @@ fn set_kvm_real_mode_regs(vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
     regs.rflags = 0x0002; // bit 1 always set
     vcpu.set_regs(&regs).map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[cfg(target_arch = "aarch64")]
+fn set_kvm_regs(vm: &kvm_ioctls::VmFd, vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
+    let mut kvi = kvm_bindings::kvm_vcpu_init::default();
+    vm.get_preferred_target(&mut kvi).map_err(|e| e.to_string())?;
+    vcpu.vcpu_init(&kvi).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+fn set_kvm_regs(_vm: &kvm_ioctls::VmFd, _vcpu: &kvm_ioctls::VcpuFd) -> Result<(), String> {
     Ok(())
 }
 
