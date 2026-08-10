@@ -738,26 +738,43 @@ impl HypervisorBackend for WhpBackend {
             }
         }
 
-        if !disk_bootable {
-            if let Some(ref path) = iso_path {
-                if load_iso_boot_sector(path, hva) {
-                    tracing::info!(path = %path, "WHP Boot Manager: Successfully loaded ISO boot image into guest RAM at 0x7C00");
-                }
-            } else if let Some(ref path) = disk_path {
-                if let Ok(mut f) = std::fs::File::open(path) {
-                    use std::io::{Read, Seek, SeekFrom};
-                    let mut mbr = [0u8; 512];
-                    if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
+        // ── VMware-style Boot Order Selection ────────────────────────────────
+        // 1. If Virtual Hard Disk is attached AND contains a bootable OS/MBR, boot directly from Disk.
+        // 2. If Virtual Hard Disk has no OS (empty/new) OR if ISO is attached, boot directly from ISO CD-ROM Image!
+        let mut booted_from_disk = false;
+        let mut boot_label = "Scanning boot media...";
+
+        if let Some(ref disk) = disk_path {
+            if let Ok(mut f) = std::fs::File::open(disk) {
+                use std::io::{Read, Seek, SeekFrom};
+                let mut mbr = [0u8; 512];
+                if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
+                    // Standard MBR boot signature 0x55AA
+                    if mbr[510] == 0x55 && mbr[511] == 0xAA && (mbr[0] != 0 || mbr[1] != 0) {
                         let dest_ptr = (hva + 0x7C00) as *mut u8;
                         unsafe {
                             std::ptr::copy_nonoverlapping(mbr.as_ptr(), dest_ptr, 512);
                         }
+                        booted_from_disk = true;
+                        boot_label = "Booting directly from Virtual Hard Disk (Primary SATA 0)...";
+                        tracing::info!(path = %disk, "WHP Bootloader: Booting directly from Virtual Hard Disk MBR");
                     }
                 }
             }
         }
 
-        write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib, '/');
+        if !booted_from_disk {
+            if let Some(ref iso) = iso_path {
+                if load_iso_boot_sector(iso, hva) {
+                    boot_label = "Booting directly from ISO Image (ATAPI Optical CD-ROM)...";
+                    tracing::info!(path = %iso, "WHP Bootloader: Booting directly from ISO Image (Installer Media)");
+                }
+            } else if booted_from_disk {
+                boot_label = "Booting directly from Virtual Hard Disk (Primary SATA 0)...";
+            }
+        }
+
+        write_bios_boot_screen(hva, &handle.name, vcpus, ram_mib, boot_label, '/');
 
         // --- Framebuffer scanner thread ---
         // Always spawns when VM starts: reads VGA text mode RAM at offset 0xB8000 every ~33ms,
@@ -1149,12 +1166,10 @@ fn framebuffer_scanner(
         if is_installed {
             let shell = shell_state.lock().unwrap();
             write_guest_shell_screen(hva, &vm_name, &shell);
-        } else if step_counter <= 2 {
-            let spinner = spinner_chars[(frame_count as usize) % spinner_chars.len()];
-            write_bios_boot_screen(hva, &vm_name, vcpus, ram_mib, spinner);
         } else {
-            let progress_step = (step_counter.saturating_sub(2) * 5) as u64;
-            write_os_installer_screen(hva, &vm_name, progress_step);
+            let spinner = spinner_chars[(frame_count as usize) % spinner_chars.len()];
+            let boot_msg = "Scanning boot media and initializing hardware devices...";
+            write_bios_boot_screen(hva, &vm_name, vcpus, ram_mib, boot_msg, spinner);
         }
 
         let text_slice: &[u8] = unsafe {
@@ -1365,98 +1380,86 @@ fn write_text_str_col(buf: &mut [u8], row: usize, start_col: usize, text: &str, 
 
 /// VMware Workstation-quality NovaVM BIOS POST screen.
 /// Blue background (0x1F / 0x1E) with authentic hardware enumeration.
-fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, spinner: char) {
+/// Modern NovaVM Workstation Logo BIOS POST Boot Screen.
+/// Dark-blue theme (0x1F) with NovaVM ASCII logo, hardware details, and boot status.
+fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, boot_media: &str, spinner: char) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
 
-    // ── Fill entire screen: bright white on blue (0x1F) ──
+    // Deep dark-blue background (0x1F)
     for i in 0..2000 {
         buf[i * 2] = b' ';
         buf[i * 2 + 1] = 0x1F;
     }
 
     const W: usize = 80;
-    // Colour attributes
-    const BLUE_YEL: u8  = 0x1E; // yellow on blue  (header)
-    const BLUE_WHT: u8  = 0x1F; // white on blue   (body)
-    const BLUE_GRN: u8  = 0x1A; // green on blue   (OK status)
-    const BLUE_CYN: u8  = 0x1B; // cyan on blue    (values)
+    const BLUE_YEL: u8 = 0x1E; // Yellow on blue
+    const BLUE_WHT: u8 = 0x1F; // Bright white on blue
+    const BLUE_GRN: u8 = 0x1A; // Bright green on blue
+    const BLUE_CYN: u8 = 0x1B; // Cyan on blue
+    const CYAN_BG: u8  = 0x3F; // Bright white on cyan header
 
-    // ── Row 0: Top border ──
-    fill_text_row(&mut buf, 0, 0xCD, BLUE_YEL);
-    write_text_cell(&mut buf, 0, 0,    0xC9, BLUE_YEL);
-    write_text_cell(&mut buf, 0, W-1,  0xBB, BLUE_YEL);
+    // ── Rows 0-2: Modern NovaVM ASCII Logo Header ──
+    fill_text_row(&mut buf, 0, b' ', CYAN_BG);
+    write_text_str_col(&mut buf, 0, 2, " ░███╗░░░██╗░█████╗░██╗░░░██╗██████╗░██╗░░░██╗███╗░░░███╗", CYAN_BG);
 
-    // ── Row 1: Title ──
-    let title = center_pad(" NovaVM Workstation BIOS v2.0 ", W - 2, ' ');
-    write_text_cell(&mut buf, 1, 0, 0xBA, BLUE_YEL);
-    write_text_str_col(&mut buf, 1, 1, &title, BLUE_YEL);
-    write_text_cell(&mut buf, 1, W-1, 0xBA, BLUE_YEL);
+    fill_text_row(&mut buf, 1, b' ', CYAN_BG);
+    write_text_str_col(&mut buf, 1, 2, " ░████╗░░██║██╔══██╗██║░░░██║██╔══██╗██║░░░██║████╗░████║", CYAN_BG);
 
-    // ── Row 2: Copyright ──
-    let copy = center_pad(" Copyright (C) 2026 Vikash Kumar  |  vikukumar.github.io ", W - 2, ' ');
-    write_text_cell(&mut buf, 2, 0, 0xBA, BLUE_YEL);
-    write_text_str_col(&mut buf, 2, 1, &copy, 0x1B);
-    write_text_cell(&mut buf, 2, W-1, 0xBA, BLUE_YEL);
+    fill_text_row(&mut buf, 2, b' ', CYAN_BG);
+    write_text_str_col(&mut buf, 2, 2, " ░██╔██╗░██║██║░░██║╚██╗░██╔╝███████║╚██╗░██╔╝██╔████╔██║", CYAN_BG);
 
-    // ── Row 3: Bottom border of header ──
+    // ── Row 3: Subtitle ──
     fill_text_row(&mut buf, 3, 0xCD, BLUE_YEL);
-    write_text_cell(&mut buf, 3, 0,   0xC8, BLUE_YEL);
-    write_text_cell(&mut buf, 3, W-1, 0xBC, BLUE_YEL);
+    let sub = center_pad(" NovaVM Workstation 2.0  |  Virtual Hardware BIOS v2.0 ", W, ' ');
+    write_text_str_col(&mut buf, 3, 0, &sub, BLUE_YEL);
 
-    // ── Rows 4-10: System information ──
-    let sys_lines: &[(&str, &str)] = &[
-        ("  Virtual Machine ", vm_name),
-        ("  Processor Type  ", &format!("Intel(R) Xeon(R) Virtual ({vcpus} vCPU x86_64)")),
-        ("  System Memory   ", &format!("{ram_mib} MB Installed RAM (ECC Simulation)") ),
-        ("  Hypervisor      ", "NovaVM Native Engine (Windows Hypervisor Platform)"),
-        ("  Display Adapter ", "NovaVM Standard VGA Controller (640x400 Text/Gfx)"),
-        ("  Security Module ", "Virtual TPM 2.0  |  SecureBoot: Enabled"),
-        ("  Build Revision  ", "NovaVM-WHP 2.0.0-dev  |  ACPI 2.0  |  SMBIOS 3.2"),
+    // ── Rows 5-11: System Information ──
+    let sys_lines: &[(&str, String)] = &[
+        (" Virtual Machine ", vm_name.to_owned()),
+        (" Processor Type  ", format!("Intel(R) Core(TM) i9 Virtual Processor ({vcpus} vCPU x86_64)")),
+        (" System Memory   ", format!("{ram_mib} MB Installed RAM (ECC Emulated)")),
+        (" Hypervisor      ", "NovaVM Native Engine (Windows Hypervisor Platform)".to_owned()),
+        (" Display Adapter ", "NovaVM Accelerated VGA / VBE Graphics (640x400)".to_owned()),
+        (" Security Module ", "Virtual TPM 2.0  |  Secure Boot: Enabled".to_owned()),
+        (" Network Adapter ", "NovaVM VirtIO 10 GbE Network Adapter (Host NAT Stack)".to_owned()),
     ];
     for (i, (label, value)) in sys_lines.iter().enumerate() {
         let row = 5 + i;
-        let line = format!("{label}: {value}");
-        write_text_str(&mut buf, row, &format!("{line:<80}"), BLUE_WHT);
-        // Colour the label part differently
-        write_text_str(&mut buf, row, &format!("{label}: "), BLUE_CYN);
-        write_text_str_col(&mut buf, row, label.len() + 2, value, BLUE_WHT);
+        write_text_str_col(&mut buf, row, 2, label, BLUE_CYN);
+        write_text_str_col(&mut buf, row, 20, ": ", BLUE_CYN);
+        write_text_str_col(&mut buf, row, 22, value, BLUE_WHT);
     }
 
     // ── Row 13: Divider ──
-    fill_text_row(&mut buf, 13, b' ', BLUE_WHT);
+    fill_text_row(&mut buf, 13, 0xC4, 0x18);
 
-    // ── Rows 14-18: Device POST results ──
+    // ── Rows 14-18: Device POST Results ──
     let devices: &[(&str, &str, bool)] = &[
-        ("  [*] Keyboard Controller (PS/2 8042)", "OK", true),
-        ("  [*] ACPI 2.0 Power Management Timer", "OK", true),
-        ("  [*] IDE/SATA Controller — Virtual Hard Disk (60.0 GB)", "OK", true),
-        ("  [*] CD-ROM / DVD-RW Drive (Optical)", "READY", true),
-        ("  [*] Network Adapter — Intel PRO/1000 MT Virtual NIC", "LINKED", true),
-        ("  [*] USB 3.0 xHCI Host Controller", "OK", true),
+        (" [*] Keyboard & Mouse Controller (PS/2 8042)", "OK", true),
+        (" [*] ACPI 2.0 Power Management & PM_TMR", "OK", true),
+        (" [*] Primary IDE/SATA Controller (Virtual Storage)", "OK", true),
+        (" [*] Secondary ATAPI Optical CD-ROM / DVD Drive", "READY", true),
+        (" [*] NovaVM VirtIO Network Controller (NAT)", "LINKED", true),
     ];
     for (i, (device, status, ok)) in devices.iter().enumerate() {
         let row = 14 + i;
-        write_text_str(&mut buf, row, &format!("{device:<72}"), BLUE_WHT);
+        write_text_str_col(&mut buf, row, 2, device, BLUE_WHT);
         let status_attr = if *ok { BLUE_GRN } else { 0x1C };
         write_text_str_col(&mut buf, row, 72, status, status_attr);
     }
 
-    // ── Row 21: Separator ──
-    fill_text_row(&mut buf, 21, b' ', BLUE_WHT);
+    // ── Row 20: Divider ──
+    fill_text_row(&mut buf, 20, 0xC4, 0x18);
 
-    // ── Row 22: Boot status ──
-    let boot_msg = format!("  [{spinner}] Scanning boot media and loading operating system...");
-    write_text_str(&mut buf, 22, &format!("{boot_msg:<80}"), 0x1A);
+    // ── Row 22: VMware-style Boot Target Announcement ──
+    let boot_str = format!(" [{spinner}] {boot_media}");
+    write_text_str_col(&mut buf, 22, 2, &format!("{boot_str:<76}"), BLUE_GRN);
 
-    // ── Row 23: F-key hints (VMware style) ──
-    let hints = "  Press F2 to enter BIOS Setup  |  Press F12 for Boot Menu  |  ESC to Skip Memory Test";
-    write_text_str(&mut buf, 23, &format!("{hints:<80}"), 0x18);
-
-    // ── Row 24: Flashing bottom bar ──
+    // ── Row 24: Modern Footer Bar ──
     fill_text_row(&mut buf, 24, b' ', 0x70);
-    let bar_msg = " NovaVM Workstation 2.0  |  Copyright (C) 2026 Vikash Kumar  |  WHP Build 20260808 ";
-    write_text_str(&mut buf, 24, &format!("{bar_msg:<80}"), 0x70);
+    let footer = " NovaVM Workstation 2.0  |  (C) 2026 Vikash Kumar  |  https://vikukumar.github.io ";
+    write_text_str_col(&mut buf, 24, 0, &format!("{footer:<80}"), 0x70);
 
     unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), text_ptr, 4000); }
 }
