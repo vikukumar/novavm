@@ -6,7 +6,7 @@ use uuid::Uuid;
 use api::{ApiError, ApiResult, CreateVmRequest, CreateVmResponse, VmSummary};
 use engine::VmConfig;
 
-use crate::state::{AppState, FramebufferFrame};
+use crate::state::AppState;
 
 /// List all VMs with summary information.
 #[tauri::command]
@@ -446,7 +446,7 @@ pub async fn send_vm_input(
     key: String,
     state: State<'_, AppState>,
 ) -> ApiResult<()> {
-    let _ = input_type;
+    let _ = (&vm_id, &input_type, &key, &state);
     #[cfg(target_os = "windows")]
     {
         use hypervisor::backend::WhpBackend;
