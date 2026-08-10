@@ -100,7 +100,9 @@ const REG_RBX:    WHV_REGISTER_NAME = WHvX64RegisterRbx;
 const REG_RSP:    WHV_REGISTER_NAME = WHvX64RegisterRsp;
 #[allow(dead_code)]
 const REG_RBP:    WHV_REGISTER_NAME = WHvX64RegisterRbp;
+#[allow(dead_code)]
 const REG_RSI:    WHV_REGISTER_NAME = WHvX64RegisterRsi;
+#[allow(dead_code)]
 const REG_RDI:    WHV_REGISTER_NAME = WHvX64RegisterRdi;
 const REG_RIP:    WHV_REGISTER_NAME = WHvX64RegisterRip;
 const REG_RFLAGS: WHV_REGISTER_NAME = WHvX64RegisterRflags;

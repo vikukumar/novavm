@@ -6,7 +6,7 @@ use uuid::Uuid;
 use api::{ApiError, ApiResult, CreateVmRequest, CreateVmResponse, VmSummary};
 use engine::VmConfig;
 
-use crate::state::AppState;
+use crate::state::{AppState, FramebufferFrame};
 
 /// List all VMs with summary information.
 #[tauri::command]
