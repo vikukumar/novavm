@@ -718,14 +718,12 @@ impl HypervisorBackend for WhpBackend {
         let ram_mib = (vm.guest_ram_size / (1024 * 1024)) as u64;
 
         // Check if disk already has installed bootable OS (MBR 0x55AA)
-        let mut disk_bootable = false;
         if let Some(ref path) = disk_path {
             if let Ok(mut f) = std::fs::File::open(path) {
                 use std::io::{Read, Seek, SeekFrom};
                 let mut mbr = [0u8; 512];
                 if f.seek(SeekFrom::Start(0)).is_ok() && f.read_exact(&mut mbr).is_ok() {
                     if mbr[510] == 0x55 && mbr[511] == 0xAA {
-                        disk_bootable = true;
                         // Copy MBR boot sector into guest RAM at 0x7C00 (standard x86 real-mode boot address)
                         let dest_ptr = (hva + 0x7C00) as *mut u8;
                         unsafe {
@@ -1148,7 +1146,7 @@ fn framebuffer_scanner(
     while !stop_flag.load(Ordering::Relaxed) {
         frame_count += 1;
 
-        let (is_installed, step_counter) = {
+        let (is_installed, _step_counter) = {
             let mut shell = shell_state.lock().unwrap();
             if !shell.is_installed {
                 shell.step_counter += 1;
@@ -1466,6 +1464,7 @@ fn write_bios_boot_screen(hva: usize, vm_name: &str, vcpus: u32, ram_mib: u64, b
 
 /// Professional NovaVM OS Installation screen.
 /// Shows realistic partitioning, formatting, file copy, driver install stages.
+#[allow(dead_code)]
 fn write_os_installer_screen(hva: usize, vm_name: &str, progress_step: u64) {
     let text_ptr = (hva + 0xB8000) as *mut u8;
     let mut buf = [0u8; 4000];
