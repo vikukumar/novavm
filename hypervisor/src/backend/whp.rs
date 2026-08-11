@@ -622,8 +622,12 @@ impl HypervisorBackend for WhpBackend {
             std::ptr::copy_nonoverlapping(bios_rom.as_ptr(), bios_hva, copy_size);
         }
 
-        // --- 7. Load disk image into VGA RAM area as scratch for INT 13h ---
-        // (The actual disk read is done lazily by the I/O port hypercall handler)
+        // --- 7. Load real ISO / disk boot sector into guest RAM at 0x7C00 ---
+        if let Some(ref iso) = req.iso_path {
+            load_iso_boot_sector(low_hva as usize, iso);
+        } else if let Some(ref disk) = req.disk_path {
+            load_iso_boot_sector(low_hva as usize, disk);
+        }
 
         // --- 8. Map guest physical memory into partition ---
         // Low RAM: 0x00000 -- 0x9FFFF (R/W/X)
@@ -1750,7 +1754,7 @@ fn set_real_mode_registers(
 // --- BIOS ROM loading --------------------------------------------------------
 
 /// Parse El Torito ISO 9660 volume descriptors or hybrid MBR to load boot code into guest RAM at 0x7C00.
-fn load_iso_boot_sector(iso_path: &str, hva: usize) -> bool {
+fn load_iso_boot_sector(hva: usize, iso_path: &str) -> bool {
     let Ok(mut f) = std::fs::File::open(iso_path) else { return false; };
     use std::io::{Read, Seek, SeekFrom};
 
