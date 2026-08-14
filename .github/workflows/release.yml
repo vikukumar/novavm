@@ -167,7 +167,7 @@ jobs:
             printf "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s main restricted universe multiverse\ndeb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-updates main restricted universe multiverse\ndeb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports %s-security main restricted universe multiverse\n" "$CODENAME" "$CODENAME" "$CODENAME" | sudo tee /etc/apt/sources.list.d/arm64-ports.list
             sudo apt-get update
             sudo apt-get install -y \
-              gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+              gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user-static binfmt-support \
               libgtk-3-dev:arm64 libwebkit2gtk-4.1-dev:arm64 libappindicator3-dev:arm64 \
               librsvg2-dev:arm64 patchelf libssl-dev:arm64 pkg-config
           else

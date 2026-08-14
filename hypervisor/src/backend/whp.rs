@@ -767,7 +767,7 @@ impl HypervisorBackend for WhpBackend {
 
         if !booted_from_disk {
             if let Some(ref iso) = iso_path {
-                if load_iso_boot_sector(iso, hva) {
+                if load_iso_boot_sector(hva, iso) {
                     boot_label = "Booting directly from ISO Image (ATAPI Optical CD-ROM)...";
                     tracing::info!(path = %iso, "WHP Bootloader: Booting directly from ISO Image (Installer Media)");
                 }

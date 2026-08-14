@@ -6,7 +6,9 @@ use uuid::Uuid;
 use api::{ApiError, ApiResult, CreateVmRequest, CreateVmResponse, VmSummary};
 use engine::VmConfig;
 
-use crate::state::{AppState, FramebufferFrame};
+use crate::state::AppState;
+#[cfg(target_os = "windows")]
+use crate::state::FramebufferFrame;
 
 /// List all VMs with summary information.
 #[tauri::command]
